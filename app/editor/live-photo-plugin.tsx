@@ -7,7 +7,6 @@ import { Check, Film, ImagePlus, Radio, X } from 'lucide-react';
 import * as stylex from '@stylexjs/stylex';
 import { Button } from '../components/ui';
 import { readImage, readVideo } from '../lib/media';
-import { createMotionPhoto, extractMotionPhoto } from '../lib/motion-photo';
 import { $createLivePhotoNode, OPEN_LIVE_PHOTO_COMMAND } from './live-photo-node';
 import { useBlobUrl, useMediaSession } from './media-session';
 
@@ -40,17 +39,16 @@ export function LivePhotoPlugin() {
     if (!photo || !clip || lock.current) return;
     lock.current = true; setBusy('正在合成实况图…'); setError('');
     try {
-      const blob = await createMotionPhoto(photo.blob, clip.blob);
-      const extracted = await extractMotionPhoto(blob);
-      const assetId = session.addLivePhoto({ blob, ...extracted });
+      const src = session.addFile(photo.blob);
+      const videoSrc = session.addFile(clip.blob);
       const name = photo.name.replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}_-]/gu, '_') || 'photo';
       editor.update(() => {
         if (selection.current) $setSelection(selection.current.clone());
         else $getRoot().selectEnd();
-        const node = $createLivePhotoNode({ assetId, fileName: `${name}_MP.jpg`, width: photo.width, height: photo.height });
+        const node = $createLivePhotoNode({ src, videoSrc, altText: photo.name, fileName: `${name}_MP.jpg`, width: photo.width, height: photo.height });
         $insertNodeToNearestRoot(node);
-        const after = $createParagraphNode();
-        node.insertAfter(after); after.select();
+        if (!node.getNextSibling()) node.insertAfter($createParagraphNode());
+        node.selectNext();
       }, { tag: HISTORY_PUSH_TAG, discrete: true });
       close();
     } catch (cause) { setError(cause instanceof Error ? cause.message : '插入失败，请重试。'); }

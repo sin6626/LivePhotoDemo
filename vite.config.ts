@@ -13,6 +13,7 @@ export default defineConfig({
     '@haklex/rich-kit-shiro', '@haklex/rich-editor-ui', '@haklex/rich-plugin-toolbar',
     '@haklex/rich-ext-nested-doc', '@lexical/react/LexicalComposerContext',
     '@lexical/react/useLexicalNodeSelection', '@lexical/utils', 'lexical', 'lucide-react', 'radix-ui',
+    '@haklex/rich-renderer-image', '@haklex/rich-editor/nodes', '@stylexjs/stylex',
   ] },
   server: { port: 5173, strictPort: true, watch: { ignored: ['**/artifacts/**'] } },
   preview: { port: 4173, strictPort: true, host: '127.0.0.1' },

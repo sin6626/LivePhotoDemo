@@ -1,6 +1,6 @@
 # Live Photo Editor Demo
 
-使用 SinPersonalSpace 博客同款 **Haklex ShiroEditor 0.0.85 + Lexical 0.41.0**，在富文本正文中插入可按住播放的实况图。
+在 SinPersonalSpace 博客同款 **Haklex ShiroEditor 0.0.85 + Lexical 0.41.0** 中，把实况图作为原图片节点的扩展来编辑。
 
 ```sh
 npm install --include=dev
@@ -8,51 +8,56 @@ npm run dev
 # http://127.0.0.1:5173
 ```
 
-页面仅包含富文本编辑器。点击「插入实况图」，或在正文输入 `/` 搜索「实况图」，选择 PNG/JPG + MP4 后插入。正文中的实况图支持按住播放、松开回到封面、声音切换、下载 Motion Photo、删除和撤销/重做。空格、Enter 也可按住播放。
+工具栏的「Image」插入普通图片；「实况图」图标或 `/live` 插入 PNG/JPG + MP4。实况图使用原图片的尺寸、图注、加载状态及浮动操作栏，仅额外显示小 LIVE 标识。
 
-单击图片选中节点，Shift 点击可多选；也可以和正文一起拖选、全选、删除及撤销。编辑器内部复制粘贴复用同一会话素材。图片上的整块高亮对应真实的 Lexical 选区。
+- 单击选中，Shift 点击多选，可与正文和普通图片一起拖选、剪切/复制/粘贴、删除、撤销和重做。
+- 使用原左侧块手柄拖动排序。
+- 按住 250ms 播放视频；移动超过 8px、拖动、离开、松开、失焦或离开视口停止，不劫持图片的指针和拖动行为。
+- 原操作栏的 Edit details、Replace image、Open source、Duplicate、Download、Remove image 保留。新增同样样式的「替换视频」和声音开关。
+- 替换封面保留视频；替换视频保留封面；复制一份保留实况图类型、视频和图注。
+- Download 根据当前封面和视频生成 Motion Photo JPG；Open source 与普通图片一样打开当前封面。
 
-**这是本地会话 Demo，刷新页面会清空正文和素材；不连接博客 API，不上传，不保存到博客或系统相册。**
+**仅本地会话，刷新会清空正文与素材。不连接博客 API，不上传，不写入博客或相册。**
 
-## 编辑器复用范围
+## 实现边界
 
-- 来源：`SinPersonalSpace/apps/admin/src/components/editor/rich/RichEditor.tsx` 的 React 编辑器组合。
-- 直接使用同版本 ShiroEditor、ToolbarPlugin、DialogStackProvider 和 NestedDocPlugin，保留库自身样式、浮动工具栏、斜杠菜单、块菜单。
-- 不复制后台 Vue 桥接、登录、上传接口或其他业务代码。
-- `patches/` 复制博客相同版本的 11 份 Haklex/Lexical 修复；`scripts/apply-editor-patches.mjs` 安装后幂等应用。依赖和补丁保存在 Demo 内，不引用或修改博客的 node_modules。
-- 保留 Haklex 自带 CSS（原编辑器的一部分）；页面壳、实况图节点和插入弹窗用 StyleX，弹窗使用 Radix，按钮为 shadcn/ui 组合方式的 StyleX 适配。
-- React Router 7 Framework Mode / SPA、React 19、TypeScript。
+- `LivePhotoNode extends ImageNode`，继承原图片数据和编辑 API。JSON 在原图片字段外增加 `videoSrc`、`fileName`，不放视频 base64。
+- 直接使用原 `ImageEditRenderer`，没有复制一套图片卡片或工具栏。小补丁提供视频覆盖层、额外按钮、下载回调插槽，并将原 Duplicate 改为 Lexical `$copyNode`，保留子类及其数据。
+- `ImageSelectionPlugin` 同时服务普通图片和实况图；删除、历史、剪贴板和块排序由原编辑器处理。
+- 素材 Blob 由页面会话保管，为撤销保留资源，卸载时释放。累计输入资源最多 256 MB。视频仅按住时加载，卸载/替换时停止播放。
+- React Router Framework SPA、TypeScript；页面壳和新增覆盖层使用 StyleX，原图片使用编辑器自己的 CSS；插入弹窗使用 Radix。
+- 复用博客原有 11 份 Haklex/Lexical 修复，增加图片渲染扩展补丁，并修正原图片插入后根节点选区按方向键报错的边界。补丁由 `scripts/apply-editor-patches.mjs` 幂等应用；不修改博客仓库。
 
-## Live Photo 节点
+图片上限 20 MB、2400 万像素；视频上限 100 MB、30 秒。普通图片保留原始格式、透明度与动画；实况封面/导出转为质量 0.92 的 JPEG，透明区域填白，不保留 EXIF/HDR。建议 2–5 秒 H.264 MP4，视频不转码。通过 URL 替换的远程封面，导出时需要对方允许跨域读取。
 
-`app/editor/live-photo-node.ts` 注册 `live-photo` DecoratorNode，并通过 Haklex 的 commandItems 同时进入工具栏、斜杠菜单、块菜单。
+此版本原图片没有拖拽缩放手柄，本次没有给实况图另加一套缩放；两者沿用同样的尺寸规则。博客后端保存、发布页渲染和跨页面持久化仍是后续接入范围。
 
-节点 JSON 只存 `assetId / fileName / width / height`，不会把视频 base64 塞进正文。资源由页面会话持有，以便删除后仍可撤销；关闭页面或卸载编辑器会释放 Blob URL。会话累计素材上限 256 MB。接入真实业务时，应把临时 assetId 换成持久化资源引用，并提供阅读端渲染器。
+输出为 Google 风格 Motion Photo，**不是苹果 Live Photo，不保证所有相册识别**。格式依据：[Google Motion Photo format](https://developer.android.com/media/platform/motion-photo-format)。本 Demo 只解析自己生成的布局。
 
-图片限 20 MB、2400 万像素；MP4 限 100 MB、30 秒。PNG/JPG 经过 Canvas 转为 JPEG（质量 0.92，透明区域填白，原 EXIF/HDR 不保留）。将 XMP 目录写入 JPEG 后追加原始 MP4，合成后回读输出文件以确认资源边界。视频不转码，建议 2–5 秒 H.264 MP4。
-
-视频 `preload="none"`，按住才播放；松开、失焦、离开视口和卸载时暂停。下载产物为 Google 风格 Motion Photo JPG，不是苹果 Live Photo，手机相册识别仍需实测。内部解析器只支持 Demo 自己生成的布局。
-
-格式依据：[Google Motion Photo format](https://developer.android.com/media/platform/motion-photo-format)。
-
-## 验证
+## 验证与启动
 
 ```sh
 npm test
 npm run typecheck
-npm run build
-npm start # http://127.0.0.1:4173 静态生产预览，Ctrl+C 关闭
-node scripts/check-dev-server.mjs # 开发服务运行时，检查实况图模块能否加载
+NODE_OPTIONS=--max-old-space-size=2048 npm run build
+npm start # http://127.0.0.1:4173，Ctrl+C 关闭
+node scripts/check-dev-server.mjs # 5173 开发服务运行时检查延迟模块
 ```
 
-Node 原生测试覆盖：XMP 长度与视频字节一致性、错误输入、Live Photo 节点与正文混排及 JSON 往返。
-浏览器已验证输入正文、插入、后续继续输入、按住播放、下载、删除、撤销/重做、斜杠菜单和 390px 手机宽度。
-下载文件提取的视频与输入 MP4 逐字节一致。去重后生产构建在 2 GB Node 堆限制内通过。
-本轮没有重测白板、嵌入等所有第三方功能。依赖锁定博客版本，npm audit 目前报告 21 项依赖漏洞（3 low、4 moderate、14 high），未为此 Demo 擅自升级整套博客依赖；不能把本地体验视为生产发布验收。
-`artifacts/` 是不提交的本地测试文件与截图。
+浏览器回归使用 Ego Browser，脚本以 `ego-browser nodejs -e "await import('file:///项目绝对路径/tests/native-image.browser.mjs')"` 执行。另一个脚本 `tests/editor-selection.browser.mjs` 检查选区、剪贴板与历史。需要先在忽略提交的 `artifacts/` 下准备测试素材：
 
-选区浏览器回归：有本地 `artifacts/test.png` 和 `artifacts/test.mp4` 测试素材、且 5173 开发服务运行时，用 `ego-browser nodejs -e "await import('file:///项目绝对路径/tests/editor-selection.browser.mjs')"` 执行。脚本使用独立测试页及内存 ClipboardEvent，不覆盖系统剪贴板中的内容；结束后关闭测试 TaskSpace。
+```sh
+mkdir -p artifacts
+ffmpeg -f lavfi -i testsrc2=size=640x480:rate=24 -t 3 -c:v libx264 -threads 2 -pix_fmt yuv420p -y artifacts/test.mp4
+ffmpeg -i artifacts/test.mp4 -frames:v 1 -threads 1 -y artifacts/test.png
+ffmpeg -f lavfi -i color=c=0x6655aa:size=320x240 -frames:v 1 -threads 1 -y artifacts/alternate.png
+ffmpeg -f lavfi -i testsrc2=size=320x240:rate=12 -t 1.5 -c:v libx264 -threads 2 -pix_fmt yuv420p -y artifacts/alternate.mp4
+```
 
-开发注意：Vite 需提前预构建延迟加载的编辑器依赖，避免用户首次插入实况图时触发整页刷新。修改素材会话模块时请刷新页面，HMR 不保证保留当前会话。保持 lucide-react 去重与 Excalidraw 的 Radix Tabs 版本覆盖，避免重复打包和旧版 React peer 冲突。
+测试覆盖原图片继承、JSON 往返、复制/替换保留视频、图片框与工具栏一致、原生操作栏、长按、选区、删除与历史。导出后的图片尺寸和视频字节也独立检查。结束后关闭测试 TaskSpace。
 
-**5173 只运行开发服务，4173 只运行生产预览。** 不能把已打开页面对应的开发服务切换成同端口的生产服务：页面仍会请求旧的 `.tsx` 模块，导致节点显示 `An error was thrown.`。如果此前已遇到该错误，恢复开发服务后刷新页面再插入。
+开发服务固定 5173，生产预览固定 4173，不能把已打开开发页面对应的服务换成生产预览，否则首次加载节点会请求不到旧 `.tsx` 模块。修改依赖补丁后执行 `npm run postinstall`，用 `npm run dev -- --force` 重建 Vite 预构建缓存。
+
+保留 lucide-react 去重和 Excalidraw Radix Tabs 覆盖；StyleX 的 `cssInjectionTarget` 指向 root CSS，确保生产环境必载。修改节点结构或素材会话模块后刷新重新插入，HMR 不承诺保留旧会话。
+
+本轮没有重测白板、嵌入等所有第三方功能。依赖锁定博客版本，npm audit 仍报告 21 项依赖漏洞（3 low、4 moderate、14 high）；本地体验不是生产发布验收。

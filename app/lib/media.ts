@@ -1,5 +1,14 @@
 import { validateMp4 } from './motion-photo';
 
+export async function readEditorImage(file: File) {
+  if (file.size > 20 * 1024 * 1024) throw new Error('图片请控制在 20 MB 以内。');
+  const bitmap = await createImageBitmap(file).catch(() => { throw new Error('浏览器无法读取这张图片。'); });
+  try {
+    if (bitmap.width * bitmap.height > 24_000_000) throw new Error('图片请控制在 2400 万像素以内。');
+    return { blob: file, name: file.name, width: bitmap.width, height: bitmap.height };
+  } finally { bitmap.close(); }
+}
+
 export async function readImage(file: File) {
   if (!/\.(png|jpe?g)$/i.test(file.name)) throw new Error('封面请选择 PNG、JPG 或 JPEG。');
   if (file.size > 20 * 1024 * 1024) throw new Error('图片请控制在 20 MB 以内。');

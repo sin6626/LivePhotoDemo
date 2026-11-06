@@ -1,26 +1,22 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-type LivePhotoAsset = { imageUrl: string; videoUrl: string; downloadUrl: string; size: number };
 function createSession() {
-  const assets = new Map<string, LivePhotoAsset>();
-  const urls = new Set<string>();
+  const files = new Map<string, Blob>();
   let usedBytes = 0;
-  function retain(blob: Blob) { const url = URL.createObjectURL(blob); urls.add(url); return url; }
   function reserve(bytes: number) {
     // ponytail: 会话内保留资源以支持撤销；超过 256 MB 时提示刷新，持久化接入后改用资源 ID。
     if (usedBytes + bytes > 256 * 1024 * 1024) throw new Error('当前会话素材已接近 256 MB，请下载需要的实况图后刷新页面再试。');
     usedBytes += bytes;
   }
   return {
-    assets,
-    addLivePhoto({ image, video, blob }: { image: Blob; video: Blob; blob: Blob }) {
+    files,
+    addFile(blob: Blob) {
       reserve(blob.size);
-      const id = crypto.randomUUID();
-      assets.set(id, { imageUrl: retain(image), videoUrl: retain(video), downloadUrl: retain(blob), size: blob.size });
-      return id;
+      const url = URL.createObjectURL(blob);
+      files.set(url, blob);
+      return url;
     },
-    addImage(blob: Blob) { reserve(blob.size); return retain(blob); },
-    dispose() { urls.forEach(url => URL.revokeObjectURL(url)); urls.clear(); assets.clear(); usedBytes = 0; },
+    dispose() { files.forEach((_, url) => URL.revokeObjectURL(url)); files.clear(); usedBytes = 0; },
   };
 }
 const SessionContext = createContext<ReturnType<typeof createSession> | null>(null);

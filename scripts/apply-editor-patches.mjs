@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
-// 复用 SinPersonalSpace 的同版本 Haklex 补丁；不修改或引用博客的 node_modules。
+// 应用博客同版本修复与 Demo 图片扩展补丁；不修改或引用博客的 node_modules。
 for (const file of readdirSync(new URL('../patches/', import.meta.url)).filter(name => name.endsWith('.patch'))) {
   const match = file.match(/^(@[^_]+)__([^@]+)@[^/]+\.patch$/);
   if (!match) throw new Error(`未知补丁名称：${file}`);

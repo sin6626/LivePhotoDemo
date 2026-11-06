@@ -2,23 +2,23 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 
 // 用 ego-browser nodejs 的模块入口执行。素材使用 artifacts/test.png 与 test.mp4。
-const task = await taskSpace('实况图选区行为修复');
+const task = await taskSpace('原图片与实况图统一验收');
 const page = task.page('p1');
 const failures = [];
 await page.goto('http://127.0.0.1:5173/');
 await page.waitForSelector('[contenteditable=true]', { state: 'visible' });
 await page.click('[contenteditable=true]');
 await page.keyboard.paste('Before photo');
-await page.click('button:has-text("插入实况图")');
+await page.click('button[aria-label="实况图"]');
 await page.setInputFiles('input[aria-label="实况图封面"]', [fileURLToPath(new URL('../artifacts/test.png', import.meta.url))]);
 await page.waitForFunction(() => !document.querySelector('input[aria-label="实况图视频"]').disabled, undefined, { timeout: 10000 });
 await page.setInputFiles('input[aria-label="实况图视频"]', [fileURLToPath(new URL('../artifacts/test.mp4', import.meta.url))]);
 await page.waitForFunction(() => [...document.querySelectorAll('button')].some(el => el.textContent === '插入正文' && !el.disabled), undefined, { timeout: 15000 });
 await page.click('button:has-text("插入正文")');
-await page.waitForSelector('[data-live-photo] img', { state: 'visible' });
+await page.waitForSelector('[data-live-photo] .rr-image-img', { state: 'visible' });
 await page.keyboard.paste('After photo');
 
-await page.click('[data-live-photo] img');
+await page.click('[data-live-photo] .rr-image-img');
 const clickSelected = await page.evaluate(() => {
   const editor = document.querySelector('[contenteditable=true]').__lexicalEditor;
   return editor.getEditorState().read(() => {
@@ -52,10 +52,15 @@ await page.mouse.move(points.ax, points.ay);
 await page.mouse.down();
 await page.mouse.move(points.bx, points.by, { steps: 10 });
 await page.mouse.up();
-const dragSelected = await page.evaluate(() => document.querySelector('[data-live-photo] figure').dataset.selected === 'true');
+await page.waitForFunction(() => document.querySelector('[data-live-photo]')?.dataset.imageSelected === 'true', undefined, { timeout: 1500 }).catch(() => {});
+const dragSelected = await page.evaluate(() => document.querySelector('[data-live-photo]').dataset.imageSelected === 'true');
+if (!dragSelected) console.log('drag detail', await page.evaluate(() => {
+  const editor = document.querySelector('[contenteditable=true]').__lexicalEditor;
+  return editor.getEditorState().read(() => ({ native: document.getSelection()?.toString(), nodes: editor.getEditorState()._selection?.getNodes().map(node => node.getType()) }));
+}));
 if (!dragSelected) failures.push('鼠标跨正文拖选没有选中实况图');
 
-await page.click('[data-live-photo] img');
+await page.click('[data-live-photo] .rr-image-img');
 await page.evaluate(() => {
   const root = document.querySelector('[contenteditable=true]');
   window.__selectionTestClipboard = new DataTransfer();
@@ -64,11 +69,11 @@ await page.evaluate(() => {
 await page.keyboard.press('ArrowDown');
 await page.evaluate(() => document.querySelector('[contenteditable=true]').dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: window.__selectionTestClipboard })));
 await page.waitForFunction(() => document.querySelectorAll('[data-live-photo]').length === 2, undefined, { timeout: 5000 });
-await page.click('[data-live-photo] img >> nth=0');
+await page.click('[data-live-photo] .rr-image-img >> nth=0');
 await page.keyboard.down('Shift');
-await page.click('[data-live-photo] img >> nth=1');
+await page.click('[data-live-photo] .rr-image-img >> nth=1');
 await page.keyboard.up('Shift');
-const multiSelected = await page.evaluate(() => [...document.querySelectorAll('[data-live-photo] figure')].every(el => el.dataset.selected === 'true'));
+const multiSelected = await page.evaluate(() => [...document.querySelectorAll('[data-live-photo]')].every(el => el.dataset.imageSelected === 'true'));
 if (!multiSelected) failures.push('Shift 点击没有同时选中两张实况图');
 await page.keyboard.press('Backspace');
 if (await page.evaluate(() => document.querySelectorAll('[data-live-photo]').length !== 0)) failures.push('多节点选区没有整体删除');

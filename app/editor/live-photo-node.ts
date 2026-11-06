@@ -1,40 +1,60 @@
-import { $applyNodeReplacement, createCommand, DecoratorNode, type NodeKey, type SerializedLexicalNode } from 'lexical';
-import { createElement, lazy, Suspense, type ReactElement } from 'react';
-import { Radio } from 'lucide-react';
+import { $applyNodeReplacement, createCommand, type EditorConfig, type NodeKey } from 'lexical';
+import { ImageNode, type ImageNodePayload, type SerializedImageNode } from '@haklex/rich-editor/nodes';
 import type { CommandItemConfig } from '@haklex/rich-editor/commands';
+import { createElement, lazy, Suspense } from 'react';
+import { Radio } from 'lucide-react';
 
 const LivePhotoView = lazy(() => import('./live-photo-view'));
 export const OPEN_LIVE_PHOTO_COMMAND = createCommand<void>('OPEN_LIVE_PHOTO');
+export type LivePhotoData = ImageNodePayload & { videoSrc: string; fileName: string };
+type SerializedLivePhoto = SerializedImageNode & { videoSrc: string; fileName: string };
 
-export type LivePhotoData = { assetId: string; fileName: string; width: number; height: number };
-type SerializedLivePhoto = SerializedLexicalNode & LivePhotoData;
-export class LivePhotoNode extends DecoratorNode<ReactElement> {
-  __data: LivePhotoData;
+export class LivePhotoNode extends ImageNode {
+  __videoSrc: string;
+  __fileName: string;
   static commandItems: CommandItemConfig[] = [{
-    title: '实况图', description: '用图片和视频插入 Live Photo',
-    icon: createElement(Radio, { size: 16 }),
-    keywords: ['live', 'photo', 'motion', '实况', '动态照片'],
-    group: 'insert', section: '媒体', placement: ['slash', 'toolbar', 'blockHandle'],
+    title: '实况图', description: '用图片和视频插入 Live Photo', icon: createElement(Radio, { size: 16 }),
+    keywords: ['live', 'photo', 'motion', '实况', '动态照片'], group: 'insert', section: '媒体',
+    placement: ['slash', 'toolbar', 'blockHandle'],
     onSelect: editor => { editor.dispatchCommand(OPEN_LIVE_PHOTO_COMMAND, undefined); },
   }];
   static getType() { return 'live-photo'; }
-  static clone(node: LivePhotoNode) { return new LivePhotoNode(node.__data, node.__key); }
-  constructor(data: LivePhotoData = { assetId: '', fileName: '', width: 0, height: 0 }, key?: NodeKey) { super(key); this.__data = { ...data }; }
-  createDOM() { const element = document.createElement('div'); element.dataset.livePhoto = ''; return element; }
-  updateDOM() { return false; }
-  isInline() { return false; }
-  getData(): LivePhotoData { return { ...this.getLatest().__data }; }
-  getTextContent() { return `[实况图：${this.getData().fileName}]`; }
-  static importJSON(node: SerializedLivePhoto) {
-    if (typeof node.assetId !== 'string' || typeof node.fileName !== 'string' ||
-        !Number.isFinite(node.width) || node.width <= 0 || !Number.isFinite(node.height) || node.height <= 0) {
-      throw new Error('实况图节点数据无效。');
-    }
-    return $createLivePhotoNode(node);
+  static clone(node: LivePhotoNode) {
+    return new LivePhotoNode({ src: node.__src, altText: node.__altText, caption: node.__caption,
+      width: node.__width, height: node.__height, thumbhash: node.__thumbhash, accent: node.__accent,
+      videoSrc: node.__videoSrc, fileName: node.__fileName }, node.__key);
   }
-  exportJSON(): SerializedLivePhoto { return { ...super.exportJSON(), ...this.getData(), type: 'live-photo', version: 1 }; }
-  decorate() { return createElement(Suspense, { fallback: createElement('p', null, '正在载入实况图…') }, createElement(LivePhotoView, { data: this.getData(), nodeKey: this.getKey() })); }
+  constructor(data: LivePhotoData = { src: '', altText: '', videoSrc: '', fileName: 'photo_MP.jpg' }, key?: NodeKey) {
+    super(data, key);
+    this.__videoSrc = data.videoSrc;
+    this.__fileName = data.fileName;
+  }
+  createDOM(config: EditorConfig) {
+    const element = super.createDOM(config);
+    element.dataset.livePhoto = '';
+    return element;
+  }
+  getVideoSrc() { return this.getLatest().__videoSrc; }
+  getFileName() { return this.getLatest().__fileName; }
+  setVideoSrc(src: string) { this.getWritable().__videoSrc = validateVideoSrc(src); }
+  static importJSON(node: SerializedLivePhoto) {
+    if (typeof node.src !== 'string' || typeof node.altText !== 'string' || typeof node.fileName !== 'string') throw new Error('实况图数据无效。');
+    return $createLivePhotoNode({ ...node, videoSrc: validateVideoSrc(node.videoSrc) });
+  }
+  exportJSON(): SerializedLivePhoto {
+    return { ...super.exportJSON(), type: 'live-photo', version: 1, videoSrc: this.getVideoSrc(), fileName: this.getFileName() };
+  }
+  decorate() {
+    const data: LivePhotoData = { src: this.getSrc(), altText: this.getAltText(), width: this.getWidth(),
+      height: this.getHeight(), caption: this.getCaption(), thumbhash: this.getThumbhash(), accent: this.getAccent(),
+      videoSrc: this.getVideoSrc(), fileName: this.getFileName() };
+    return createElement(Suspense, { fallback: createElement('span', null, '正在载入图片…') }, createElement(LivePhotoView, { data, nodeKey: this.getKey() }));
+  }
+}
+function validateVideoSrc(src: string) {
+  if (typeof src !== 'string' || !/^(blob:|https?:\/\/|\/(?!\/))/.test(src)) throw new Error('视频资源地址无效。');
+  return src;
 }
 export function $createLivePhotoNode(data: LivePhotoData): LivePhotoNode {
-  return $applyNodeReplacement(new LivePhotoNode({ assetId: data.assetId, fileName: data.fileName, width: data.width, height: data.height }));
+  return $applyNodeReplacement(new LivePhotoNode({ ...data, videoSrc: validateVideoSrc(data.videoSrc) }));
 }
