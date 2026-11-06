@@ -44,3 +44,10 @@ React Router 7 Framework SPA、TypeScript、StyleX，shadcn/ui 的 Radix 组件�
 - 必须保留博客的 lucide-react 0.574.0 去重与 Excalidraw Radix Tabs 1.1.2 覆盖；多份图标库会使打包超 2 GB。npm 更改 overrides 后必要时 `npm dedupe --include=dev`，随后重跑 postinstall，不能只看配置假设已去重。
 - 去重后生产构建在 `NODE_OPTIONS=--max-old-space-size=2048` 下通过。只运行一套本地服务，结束验证后关闭测试浏览器；用户体验服务可以按明确要求保留。
 - 本轮验证范围为正文与实况图，不代表白板、嵌入等第三方功能全部重测。依赖沿用博客版本，尚未做完整生产安全升级。
+
+## 开发与预览服务不能混用端口（2026-11-06 修复）
+- 用户已打开开发页面时，把 5173 换成生产预览，会使首次插入节点请求的 `/app/editor/live-photo-view.tsx` 得到 HTML，React.lazy 报 Failed to fetch dynamically imported module，编辑器只显示 An error was thrown。
+- 5173 固定运行 `npm run dev`，4173 固定运行 `npm start`。禁止为了复用链接把生产预览启动到 5173。构建检查结束后恢复开发服务，关闭独立预览服务。
+- `node scripts/check-dev-server.mjs` 检查真正的延迟模块响应，已在错误服务下失败（text/html），恢复开发服务后通过（JavaScript）。
+- 用户素材是 Downloads 中同名的 mmexport1793954552951.jpg/mp4；已确认 HEVC 视频可解码播放，不能把本次错误误诊成素材格式不兼容。用户原文件不得改动或提交。
+- 恢复服务后用原素材完整回测：图片 1024px 宽、视频解码宽 864px，播放进度正常增长，松开暂停回到封面；捕获的 console.error 为空。类型检查及 3 项测试通过。

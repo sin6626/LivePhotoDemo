@@ -39,7 +39,8 @@ npm run dev
 npm test
 npm run typecheck
 npm run build
-npm start # 静态生产预览，Ctrl+C 关闭
+npm start # http://127.0.0.1:4173 静态生产预览，Ctrl+C 关闭
+node scripts/check-dev-server.mjs # 开发服务运行时，检查实况图模块能否加载
 ```
 
 Node 原生测试覆盖：XMP 长度与视频字节一致性、错误输入、Live Photo 节点与正文混排及 JSON 往返。
@@ -49,3 +50,5 @@ Node 原生测试覆盖：XMP 长度与视频字节一致性、错误输入、Li
 `artifacts/` 是不提交的本地测试文件与截图。
 
 开发注意：Vite 需提前预构建延迟加载的编辑器依赖，避免用户首次插入实况图时触发整页刷新。修改素材会话模块时请刷新页面，HMR 不保证保留当前会话。保持 lucide-react 去重与 Excalidraw 的 Radix Tabs 版本覆盖，避免重复打包和旧版 React peer 冲突。
+
+**5173 只运行开发服务，4173 只运行生产预览。** 不能把已打开页面对应的开发服务切换成同端口的生产服务：页面仍会请求旧的 `.tsx` 模块，导致节点显示 `An error was thrown.`。如果此前已遇到该错误，恢复开发服务后刷新页面再插入。
