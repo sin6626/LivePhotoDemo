@@ -2,6 +2,7 @@
 
 ## 用户要求与协作
 - 中文沟通，Conventional Commits，提交说明用中文。默认本地提交，不擅自推送/部署；GitHub 用本机 gh，PR 先 Draft。
+- 用户要求界面使用英文并对齐 Haklex；聊天和项目说明仍用中文。实况图弹窗直接用 Haklex Dialog/ActionButton 和 --rc-* 设计变量，避免再造独立风格的弹窗。
 - 禁止批量删除文件或目录；只允许删除一个明确路径文件。可清理本任务自己的 worktree，不干扰其他工作。
 - 控制资源占用：只保留用户需要的开发服务，测试后关闭自启浏览器和临时预览；构建使用 2 GB Node 堆限制，不并行跑多个构建/转码。
 - 当前项目是 Demo，博客源码仅作参考，不修改 SinPersonalSpace、不接真实博客 API、不读写相册，不改用户原始图片/视频。
@@ -53,3 +54,13 @@
 - 用户 Downloads 的 mmexport1793954552951.jpg/mp4 已在生产 4173 复验：两种图片尺寸一致，HEVC 864px 视频按住播放、松开暂停并隐藏，无控制台错误；下载视频/音轨与原文件逐字节一致。原文件不修改、不提交。
 - 浏览器测试用忽略提交的 artifacts/ 素材，生成命令见 README；必须关闭测试 TaskSpace。不要将截图/临时文件称为实机相册兼容验证。
 - 依赖沿用博客版本，npm audit 报告 21 项既有问题，未执行破坏性自动升级；本地体验不是生产发布验收。
+
+## Mac 格式实验（2026-11-06）
+- 详情见 docs/media-normalization.md 与 artifacts/mac-formats/browser-results.json。浏览器测试脚本支持 `?space=<已分配的测试空间 ID>`，复用同一空间。
+- 当前 Mac Chromium 156 原生无法解码生成的 HEIC 样本；原生可以解码 HEVC MP4、HEVC MOV、H.264 MOV。Demo 的 MOV 拒绝来自当前容器白名单，不代表浏览器不能播放。
+- 用户真实 MP4 是 HEVC + AAC，并非 H.264。扩展名/容器校验不能当作统一编码保证。
+- 本机 sips 已验证 HEIC→JPEG，FFmpeg 已验证 SDR HEVC MOV→H.264/yuv420p + AAC/faststart MP4。HEIC/MOV 为用户现有素材衍生的测试样本，未读取相册、未改原文件。
+- 转换后的 JPEG/MP4 已实际插入、播放、导出并验证视频字节一致；H.264/AAC MOV 重封装到 MP4 的视频和音频编码数据哈希不变。英文弹窗、原操作栏回归、类型检查和 2 GB 内生产构建通过。
+- 浏览器回归操作浮动图片工具栏时，先把 CDP 指针移出再移入图片并等待 opacity=1，再命中按钮；混用原生光标与 CDP 时，同坐标移动可能不触发 mouseenter，不能将误点后面的 div 当作功能失败。
+- 当前网页仍没有接入自动 HEIC 解码/视频转码；不要把命令行测试成功宣称为网页自动转换。正式接入建议在素材上传/标准化层处理，节点保持 src/videoSrc 引用，避免塞进编辑器组件。
+- 尚未测 HDR/Dolby Vision/RAW、Safari/Firefox/Windows/Android；本机 WebCodecs 能力探测不等于完整跨平台转码方案。

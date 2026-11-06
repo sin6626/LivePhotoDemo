@@ -8,7 +8,7 @@ npm run dev
 # http://127.0.0.1:5173
 ```
 
-工具栏的「Image」插入普通图片；「实况图」图标或 `/live` 插入 PNG/JPG + MP4。实况图使用原图片的尺寸、图注、加载状态及浮动操作栏，仅额外显示小 LIVE 标识。
+工具栏的「Image」插入普通图片；「Live photo」图标或 `/live` 插入 PNG/JPG + MP4。新增界面统一英文，实况图插入弹窗直接复用 Haklex 原生 Dialog/ActionButton。实况图使用原图片的尺寸、图注、加载状态及浮动操作栏，仅额外显示小 LIVE 标识。
 
 - 单击选中，Shift 点击多选，可与正文和普通图片一起拖选、剪切/复制/粘贴、删除、撤销和重做。
 - 使用原左侧块手柄拖动排序。
@@ -25,7 +25,7 @@ npm run dev
 - 直接使用原 `ImageEditRenderer`，没有复制一套图片卡片或工具栏。小补丁提供视频覆盖层、额外按钮、下载回调插槽，并将原 Duplicate 改为 Lexical `$copyNode`，保留子类及其数据。
 - `ImageSelectionPlugin` 同时服务普通图片和实况图；删除、历史、剪贴板和块排序由原编辑器处理。
 - 素材 Blob 由页面会话保管，为撤销保留资源，卸载时释放。累计输入资源最多 256 MB。视频仅按住时加载，卸载/替换时停止播放。
-- React Router Framework SPA、TypeScript；页面壳和新增覆盖层使用 StyleX，原图片使用编辑器自己的 CSS；插入弹窗使用 Radix。
+- React Router Framework SPA、TypeScript；页面壳和新增覆盖层使用 StyleX，图片和插入弹窗复用 Haklex 的组件、主题变量与样式。
 - 复用博客原有 11 份 Haklex/Lexical 修复，增加图片渲染扩展补丁，并修正原图片插入后根节点选区按方向键报错的边界。补丁由 `scripts/apply-editor-patches.mjs` 幂等应用；不修改博客仓库。
 
 图片上限 20 MB、2400 万像素；视频上限 100 MB、30 秒。普通图片保留原始格式、透明度与动画；实况封面/导出转为质量 0.92 的 JPEG，透明区域填白，不保留 EXIF/HDR。建议 2–5 秒 H.264 MP4，视频不转码。通过 URL 替换的远程封面，导出时需要对方允许跨域读取。
@@ -35,6 +35,8 @@ npm run dev
 编辑区图片最大宽度为正文宽度，最大高度为 `min(70vh, 400px)`，等比缩小且不放大小图。普通图和实况图共用 `app/editor/image-layout.css`，仅调整显示，不修改原图尺寸或导出文件。400px 来自博客 Markdown 所见即所得编辑器的块图规则；Haklex 本身没有限高，博客阅读页另有 `min(70vh, 42rem)`，这三层不同。
 
 输出为 Google 风格 Motion Photo，**不是苹果 Live Photo，不保证所有相册识别**。格式依据：[Google Motion Photo format](https://developer.android.com/media/platform/motion-photo-format)。本 Demo 只解析自己生成的布局。
+
+Mac HEIC/MOV/HEVC 的实际解码、转换结果和架构建议见 [媒体标准化评估](docs/media-normalization.md)。本机转换流程已试验，网页尚未接入自动转码；不要把 MP4 容器等同于 H.264 编码。
 
 ## 验证与启动
 
