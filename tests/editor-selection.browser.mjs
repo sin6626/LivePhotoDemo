@@ -1,0 +1,76 @@
+import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
+
+// 用 ego-browser nodejs 的模块入口执行。素材使用 artifacts/test.png 与 test.mp4。
+const task = await taskSpace('实况图选区行为修复');
+const page = task.page('p1');
+const failures = [];
+await page.goto('http://127.0.0.1:5173/');
+await page.waitForSelector('[contenteditable=true]', { state: 'visible' });
+await page.click('[contenteditable=true]');
+await page.keyboard.paste('Before photo');
+await page.click('button:has-text("插入实况图")');
+await page.setInputFiles('input[aria-label="实况图封面"]', [fileURLToPath(new URL('../artifacts/test.png', import.meta.url))]);
+await page.waitForFunction(() => !document.querySelector('input[aria-label="实况图视频"]').disabled, undefined, { timeout: 10000 });
+await page.setInputFiles('input[aria-label="实况图视频"]', [fileURLToPath(new URL('../artifacts/test.mp4', import.meta.url))]);
+await page.waitForFunction(() => [...document.querySelectorAll('button')].some(el => el.textContent === '插入正文' && !el.disabled), undefined, { timeout: 15000 });
+await page.click('button:has-text("插入正文")');
+await page.waitForSelector('[data-live-photo] img', { state: 'visible' });
+await page.keyboard.paste('After photo');
+
+await page.click('[data-live-photo] img');
+const clickSelected = await page.evaluate(() => {
+  const editor = document.querySelector('[contenteditable=true]').__lexicalEditor;
+  return editor.getEditorState().read(() => {
+    const selection = editor.getEditorState()._selection;
+    return selection?.constructor.name.includes('NodeSelection') && selection.getNodes().some(node => node.getType() === 'live-photo');
+  });
+});
+if (!clickSelected) failures.push('单击图片后，没有保留实况图 NodeSelection');
+
+await page.focus('[contenteditable=true]');
+await page.keyboard.press('ControlOrMeta+a');
+const rangeSelected = await page.evaluate(() => {
+  const editor = document.querySelector('[contenteditable=true]').__lexicalEditor;
+  return editor.getEditorState().read(() => editor.getEditorState()._selection?.getNodes().some(node => node.getType() === 'live-photo'));
+});
+if (!rangeSelected) failures.push('正文全选没有包含实况图');
+await page.keyboard.press('Backspace');
+const deleted = await page.evaluate(() => ({ text: document.querySelector('[contenteditable=true]').innerText.trim(), photos: document.querySelectorAll('[data-live-photo]').length }));
+if (deleted.text !== '' || deleted.photos !== 0) failures.push(`删除混合选区后仍有残留：${deleted.text}`);
+await page.click('button[aria-label="Undo"]');
+const restored = await page.evaluate(() => ({ text: document.querySelector('[contenteditable=true]').innerText, photos: document.querySelectorAll('[data-live-photo]').length }));
+if (restored.photos !== 1 || !restored.text.includes('Before photo') || !restored.text.includes('After photo')) failures.push('撤销没有同时恢复文字与实况图');
+await page.cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false });
+const points = await page.evaluate(() => {
+  const paragraphs = [...document.querySelectorAll('[contenteditable=true] > p')];
+  const before = paragraphs.find(p => p.textContent === 'Before photo').getBoundingClientRect();
+  const after = paragraphs.find(p => p.textContent === 'After photo').getBoundingClientRect();
+  return { ax: before.x + 3, ay: before.y + before.height / 2, bx: after.x + 75, by: after.y + after.height / 2 };
+});
+await page.mouse.move(points.ax, points.ay);
+await page.mouse.down();
+await page.mouse.move(points.bx, points.by, { steps: 10 });
+await page.mouse.up();
+const dragSelected = await page.evaluate(() => document.querySelector('[data-live-photo] figure').dataset.selected === 'true');
+if (!dragSelected) failures.push('鼠标跨正文拖选没有选中实况图');
+
+await page.click('[data-live-photo] img');
+await page.evaluate(() => {
+  const root = document.querySelector('[contenteditable=true]');
+  window.__selectionTestClipboard = new DataTransfer();
+  root.dispatchEvent(new ClipboardEvent('copy', { bubbles: true, cancelable: true, clipboardData: window.__selectionTestClipboard }));
+});
+await page.keyboard.press('ArrowDown');
+await page.evaluate(() => document.querySelector('[contenteditable=true]').dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: window.__selectionTestClipboard })));
+await page.waitForFunction(() => document.querySelectorAll('[data-live-photo]').length === 2, undefined, { timeout: 5000 });
+await page.click('[data-live-photo] img >> nth=0');
+await page.keyboard.down('Shift');
+await page.click('[data-live-photo] img >> nth=1');
+await page.keyboard.up('Shift');
+const multiSelected = await page.evaluate(() => [...document.querySelectorAll('[data-live-photo] figure')].every(el => el.dataset.selected === 'true'));
+if (!multiSelected) failures.push('Shift 点击没有同时选中两张实况图');
+await page.keyboard.press('Backspace');
+if (await page.evaluate(() => document.querySelectorAll('[data-live-photo]').length !== 0)) failures.push('多节点选区没有整体删除');
+console.log({ clickSelected, rangeSelected, dragSelected, multiSelected, deleted, restored, failures });
+assert.equal(failures.length, 0, failures.join('\n'));

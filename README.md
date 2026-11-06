@@ -10,6 +10,8 @@ npm run dev
 
 页面仅包含富文本编辑器。点击「插入实况图」，或在正文输入 `/` 搜索「实况图」，选择 PNG/JPG + MP4 后插入。正文中的实况图支持按住播放、松开回到封面、声音切换、下载 Motion Photo、删除和撤销/重做。空格、Enter 也可按住播放。
 
+单击图片选中节点，Shift 点击可多选；也可以和正文一起拖选、全选、删除及撤销。编辑器内部复制粘贴复用同一会话素材。图片上的整块高亮对应真实的 Lexical 选区。
+
 **这是本地会话 Demo，刷新页面会清空正文和素材；不连接博客 API，不上传，不保存到博客或系统相册。**
 
 ## 编辑器复用范围
@@ -48,6 +50,8 @@ Node 原生测试覆盖：XMP 长度与视频字节一致性、错误输入、Li
 下载文件提取的视频与输入 MP4 逐字节一致。去重后生产构建在 2 GB Node 堆限制内通过。
 本轮没有重测白板、嵌入等所有第三方功能。依赖锁定博客版本，npm audit 目前报告 21 项依赖漏洞（3 low、4 moderate、14 high），未为此 Demo 擅自升级整套博客依赖；不能把本地体验视为生产发布验收。
 `artifacts/` 是不提交的本地测试文件与截图。
+
+选区浏览器回归：有本地 `artifacts/test.png` 和 `artifacts/test.mp4` 测试素材、且 5173 开发服务运行时，用 `ego-browser nodejs -e "await import('file:///项目绝对路径/tests/editor-selection.browser.mjs')"` 执行。脚本使用独立测试页及内存 ClipboardEvent，不覆盖系统剪贴板中的内容；结束后关闭测试 TaskSpace。
 
 开发注意：Vite 需提前预构建延迟加载的编辑器依赖，避免用户首次插入实况图时触发整页刷新。修改素材会话模块时请刷新页面，HMR 不保证保留当前会话。保持 lucide-react 去重与 Excalidraw 的 Radix Tabs 版本覆盖，避免重复打包和旧版 React peer 冲突。
 

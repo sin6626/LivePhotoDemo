@@ -51,3 +51,9 @@ React Router 7 Framework SPA、TypeScript、StyleX，shadcn/ui 的 Radix 组件�
 - `node scripts/check-dev-server.mjs` 检查真正的延迟模块响应，已在错误服务下失败（text/html），恢复开发服务后通过（JavaScript）。
 - 用户素材是 Downloads 中同名的 mmexport1793954552951.jpg/mp4；已确认 HEVC 视频可解码播放，不能把本次错误误诊成素材格式不兼容。用户原文件不得改动或提交。
 - 恢复服务后用原素材完整回测：图片 1024px 宽、视频解码宽 864px，播放进度正常增长，松开暂停回到封面；捕获的 console.error 为空。类型检查及 3 项测试通过。
+
+## 实况图必须使用编辑器选区（2026-11-06）
+- 不能在 React onClick 中单独设置 NodeSelection，Lexical 的默认 CLICK_COMMAND 会随后清掉它。通过优先级高于编辑器默认值的 CLICK_COMMAND 处理节点单选/Shift 多选，并把焦点交回编辑器。
+- useLexicalNodeSelection 的 selected 也会在 RangeSelection 包含该节点时为 true。不能据此拦截 Backspace/Delete 只删当前图；文字混合选区和节点选区都交由原生 Lexical/Haklex 删除逻辑处理。
+- 实况图选中时显示整块高亮，选中状态由 Lexical 统一驱动，不另存一套 UI 选择状态。
+- 回归脚本 `tests/editor-selection.browser.mjs` 使用本地 artifacts/test.png 和 test.mp4，覆盖单选、全选、混合删除/撤销、鼠标跨块拖选、编辑器内复制粘贴、Shift 多选和批量删除；修复前实测单选被清空、混合选区只删图，修复后全组通过。另验按住播放/松开暂停正常，松开后保留节点选区。
