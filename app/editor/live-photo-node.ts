@@ -13,8 +13,8 @@ export class LivePhotoNode extends ImageNode {
   __videoSrc: string;
   __fileName: string;
   static commandItems: CommandItemConfig[] = [{
-    title: '实况图', description: '用图片和视频插入 Live Photo', icon: createElement(Radio, { size: 16 }),
-    keywords: ['live', 'photo', 'motion', '实况', '动态照片'], group: 'insert', section: '媒体',
+    title: 'Live photo', description: 'Insert an image with a video clip', icon: createElement(Radio, { size: 16 }),
+    keywords: ['live', 'photo', 'motion', '实况', '动态照片'], group: 'insert', section: 'MEDIA',
     placement: ['slash', 'toolbar', 'blockHandle'],
     onSelect: editor => { editor.dispatchCommand(OPEN_LIVE_PHOTO_COMMAND, undefined); },
   }];
@@ -38,7 +38,7 @@ export class LivePhotoNode extends ImageNode {
   getFileName() { return this.getLatest().__fileName; }
   setVideoSrc(src: string) { this.getWritable().__videoSrc = validateVideoSrc(src); }
   static importJSON(node: SerializedLivePhoto) {
-    if (typeof node.src !== 'string' || typeof node.altText !== 'string' || typeof node.fileName !== 'string') throw new Error('实况图数据无效。');
+    if (typeof node.src !== 'string' || typeof node.altText !== 'string' || typeof node.fileName !== 'string') throw new Error('Invalid live photo data.');
     return $createLivePhotoNode({ ...node, videoSrc: validateVideoSrc(node.videoSrc) });
   }
   exportJSON(): SerializedLivePhoto {
@@ -48,11 +48,11 @@ export class LivePhotoNode extends ImageNode {
     const data: LivePhotoData = { src: this.getSrc(), altText: this.getAltText(), width: this.getWidth(),
       height: this.getHeight(), caption: this.getCaption(), thumbhash: this.getThumbhash(), accent: this.getAccent(),
       videoSrc: this.getVideoSrc(), fileName: this.getFileName() };
-    return createElement(Suspense, { fallback: createElement('span', null, '正在载入图片…') }, createElement(LivePhotoView, { data, nodeKey: this.getKey() }));
+    return createElement(Suspense, { fallback: createElement('span', null, 'Loading image…') }, createElement(LivePhotoView, { data, nodeKey: this.getKey() }));
   }
 }
 function validateVideoSrc(src: string) {
-  if (typeof src !== 'string' || !/^(blob:|https?:\/\/|\/(?!\/))/.test(src)) throw new Error('视频资源地址无效。');
+  if (typeof src !== 'string' || !/^(blob:|https?:\/\/|\/(?!\/))/.test(src)) throw new Error('Invalid video URL.');
   return src;
 }
 export function $createLivePhotoNode(data: LivePhotoData): LivePhotoNode {

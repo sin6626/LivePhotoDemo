@@ -2,19 +2,21 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 
 // 用 ego-browser nodejs 的模块入口执行。素材使用 artifacts/test.png 与 test.mp4。
-const task = await taskSpace('原图片与实况图统一验收');
+const spaceId = Number(new URL(import.meta.url).searchParams.get('space'));
+const task = spaceId ? await takeOverTaskSpace(spaceId) : await taskSpace('LivePhotoDemo browser checks');
 const page = task.page('p1');
 const failures = [];
 await page.goto('http://127.0.0.1:5173/');
 await page.waitForSelector('[contenteditable=true]', { state: 'visible' });
 await page.click('[contenteditable=true]');
 await page.keyboard.paste('Before photo');
-await page.click('button[aria-label="实况图"]');
-await page.setInputFiles('input[aria-label="实况图封面"]', [fileURLToPath(new URL('../artifacts/test.png', import.meta.url))]);
-await page.waitForFunction(() => !document.querySelector('input[aria-label="实况图视频"]').disabled, undefined, { timeout: 10000 });
-await page.setInputFiles('input[aria-label="实况图视频"]', [fileURLToPath(new URL('../artifacts/test.mp4', import.meta.url))]);
-await page.waitForFunction(() => [...document.querySelectorAll('button')].some(el => el.textContent === '插入正文' && !el.disabled), undefined, { timeout: 15000 });
-await page.click('button:has-text("插入正文")');
+await page.click('button[aria-label="Live photo"]');
+await page.setInputFiles('input[aria-label="Cover image"]', [fileURLToPath(new URL('../artifacts/test.png', import.meta.url))]);
+await page.waitForFunction(() => !document.querySelector('input[aria-label="Video clip"]').disabled, undefined, { timeout: 10000 });
+await page.setInputFiles('input[aria-label="Video clip"]', [fileURLToPath(new URL('../artifacts/test.mp4', import.meta.url))]);
+await page.waitForFunction(() => [...document.querySelectorAll('button')].some(el => el.textContent === 'Insert' && !el.disabled), undefined, { timeout: 15000 });
+await page.click('button:has-text("Insert")');
+await page.waitForFunction(() => !document.querySelector('[role=dialog]'), undefined, { timeout: 5000 });
 await page.waitForSelector('[data-live-photo] .rr-image-img', { state: 'visible' });
 await page.keyboard.paste('After photo');
 

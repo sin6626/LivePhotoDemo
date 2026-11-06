@@ -7,6 +7,6 @@
   button:disabled { cursor: not-allowed; }
   a { color: inherit; }
   h1, h2, h3, p { margin: 0; }
-  button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #508068; outline-offset: 4px; }
-  ::selection { background: #d9e9dd; }
+  button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid var(--rc-accent, #2563eb); outline-offset: 4px; }
+  ::selection { background: var(--rc-accent-light, #2563eb20); }
 }

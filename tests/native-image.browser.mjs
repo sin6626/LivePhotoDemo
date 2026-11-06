@@ -1,12 +1,32 @@
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 
-const task = await taskSpace('原图片与实况图统一验收');
+const spaceId = Number(new URL(import.meta.url).searchParams.get('space'));
+const task = spaceId ? await takeOverTaskSpace(spaceId) : await taskSpace('LivePhotoDemo browser checks');
 const page = task.page('p1');
+await page.cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1600, deviceScaleFactor: 1, mobile: false });
 const fixture = name => fileURLToPath(new URL(`../artifacts/${name}`, import.meta.url));
 const content = () => page.evaluate(() => document.querySelector('[contenteditable=true]').__lexicalEditor.getEditorState().toJSON().root.children);
+// 浮动图片工具栏在鼠标移动中淡入淡出；按实际命中点操作，避免原生光标桥误点到背后的 div。
+async function clickImageAction(title, index = 0) {
+  const selector = `[data-live-photo] button[title="${title}"]`;
+  const point = await page.evaluate(index => {
+    const image = document.querySelectorAll('[data-live-photo] .rr-image-img')[index];
+    image.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const r = image.getBoundingClientRect(); return { x: r.x + r.width / 2, y: (Math.max(0, r.top) + Math.min(innerHeight, r.bottom)) / 2 };
+  }, index);
+  await page.cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5 });
+  await page.cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
+  await page.waitForFunction(index => getComputedStyle(document.querySelectorAll('[data-live-photo] .rr-image-edit-toolbar')[index]).opacity === '1', index, { timeout: 3000 });
+  const button = await page.evaluate(({ selector, index }) => { const r = document.querySelectorAll(selector)[index].getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, { selector, index });
+  await page.cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', ...button });
+  await page.cdp('Input.dispatchMouseEvent', { type: 'mousePressed', ...button, button: 'left', clickCount: 1 });
+  await page.cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', ...button, button: 'left', clickCount: 1 });
+}
+
 await page.goto('http://127.0.0.1:5173/');
 await page.waitForSelector('[contenteditable=true]', { state: 'visible' });
+await page.cdp('Page.bringToFront');
 await page.evaluate(() => {
   window.__nativeImageErrors = [];
   const original = console.error;
@@ -21,12 +41,13 @@ await page.setInputFiles('[role=dialog] input[type=file]', [fixture('test.png')]
 await page.waitForSelector('.rich-image-wrapper .rr-image-loaded', { state: 'visible' });
 assert.equal(await page.evaluate(async () => (await (await fetch(document.querySelector('.rr-image-img').src)).blob()).type), 'image/png', '普通图片保留原格式');
 await page.keyboard.press('ArrowDown');
-await page.click('button[aria-label="实况图"]');
-await page.setInputFiles('input[aria-label="实况图封面"]', [fixture('test.png')]);
-await page.waitForFunction(() => !document.querySelector('input[aria-label="实况图视频"]').disabled, undefined, { timeout: 10000 });
-await page.setInputFiles('input[aria-label="实况图视频"]', [fixture('test.mp4')]);
-await page.waitForFunction(() => [...document.querySelectorAll('button')].some(el => el.textContent === '插入正文' && !el.disabled), undefined, { timeout: 15000 });
-await page.click('button:has-text("插入正文")');
+await page.click('button[aria-label="Live photo"]');
+await page.setInputFiles('input[aria-label="Cover image"]', [fixture('test.png')]);
+await page.waitForFunction(() => !document.querySelector('input[aria-label="Video clip"]').disabled, undefined, { timeout: 10000 });
+await page.setInputFiles('input[aria-label="Video clip"]', [fixture('test.mp4')]);
+await page.waitForFunction(() => [...document.querySelectorAll('button')].some(el => el.textContent === 'Insert' && !el.disabled), undefined, { timeout: 15000 });
+await page.click('button:has-text("Insert")');
+await page.waitForFunction(() => !document.querySelector('[role=dialog]'), undefined, { timeout: 5000 });
 await page.waitForSelector('[data-live-photo] .rr-image-loaded', { state: 'visible' });
 const parity = await page.evaluate(() => [...document.querySelectorAll('.rich-image-wrapper')].map(el => {
   const frame = el.querySelector('.rr-image-frame'); const toolbar = el.querySelector('.rr-image-edit-toolbar');
@@ -39,27 +60,24 @@ assert.equal(parity[0].height, parity[1].height);
 assert.equal(parity[0].radius, parity[1].radius);
 for (const title of parity[0].buttons) assert.ok(parity[1].buttons.includes(title), `缺少原图片操作 ${title}`);
 const initial = (await content()).find(n => n.type === 'live-photo');
-await page.hover('[data-live-photo] .rr-image-img');
-await page.click('[data-live-photo] button[title="Duplicate"]');
+await clickImageAction('Duplicate');
 await page.waitForFunction(() => document.querySelectorAll('[data-live-photo]').length === 2, undefined, { timeout: 5000 });
 const copies = (await content()).filter(n => n.type === 'live-photo');
 assert.equal(copies[1].videoSrc, initial.videoSrc);
 assert.equal(copies[1].src, initial.src);
-await page.click('[data-live-photo] button[title="Remove image"] >> nth=1');
-await page.hover('[data-live-photo] .rr-image-img');
-await page.click('[data-live-photo] button[title="Edit details"]');
+await clickImageAction('Remove image', 1);
+await clickImageAction('Edit details');
 await page.fill('input[placeholder="Alt text"]', '实况图描述');
 await page.fill('input[placeholder="Caption (optional)"]', '和普通图片一样的图注');
 await page.click('button:text-is("Save")');
 assert.equal((await content()).find(n => n.type === 'live-photo').caption, '和普通图片一样的图注');
-await page.hover('[data-live-photo] .rr-image-img');
-await page.click('[data-live-photo] button[title="Replace image"]');
+await clickImageAction('Replace image');
 await page.setInputFiles('input[type=file][accept="image/*"]', [fixture('alternate.png')]);
 await page.waitForFunction(() => document.querySelector('[data-live-photo] .rr-image-img')?.naturalWidth === 320, undefined, { timeout: 10000 });
 const coverReplaced = (await content()).find(n => n.type === 'live-photo');
 assert.notEqual(coverReplaced.src, initial.src);
 assert.equal(coverReplaced.videoSrc, initial.videoSrc);
-await page.setInputFiles('input[aria-label="选择替换视频"]', [fixture('alternate.mp4')]);
+await page.setInputFiles('input[aria-label="Replacement video"]', [fixture('alternate.mp4')]);
 await page.waitForFunction(old => { const video = document.querySelector('[data-live-photo] video'); return video && video.src !== old; }, initial.videoSrc, { timeout: 10000 });
 const videoReplaced = (await content()).find(n => n.type === 'live-photo');
 assert.equal(videoReplaced.src, coverReplaced.src);
@@ -68,9 +86,8 @@ await page.click('button[aria-label="Undo"]');
 assert.equal((await content()).find(n => n.type === 'live-photo').videoSrc, initial.videoSrc);
 await page.click('button[aria-label="Redo"]');
 assert.equal((await content()).find(n => n.type === 'live-photo').videoSrc, videoReplaced.videoSrc);
-await page.hover('[data-live-photo] .rr-image-img');
 const downloadPromise = page.waitForEvent('download', { timeout: 15000 });
-await page.click('[data-live-photo] button[title="Download"]');
+await clickImageAction('Download');
 const download = await downloadPromise;
 await download.saveAs(fixture('native-image_MP.jpg'));
 await page.click('[data-live-photo] .rr-image-img');

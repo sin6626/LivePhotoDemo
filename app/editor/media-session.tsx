@@ -5,7 +5,7 @@ function createSession() {
   let usedBytes = 0;
   function reserve(bytes: number) {
     // ponytail: 会话内保留资源以支持撤销；超过 256 MB 时提示刷新，持久化接入后改用资源 ID。
-    if (usedBytes + bytes > 256 * 1024 * 1024) throw new Error('当前会话素材已接近 256 MB，请下载需要的实况图后刷新页面再试。');
+    if (usedBytes + bytes > 256 * 1024 * 1024) throw new Error('This session has reached its 256 MB media limit. Download your live photos, then reload to start a new session.');
     usedBytes += bytes;
   }
   return {
@@ -27,7 +27,7 @@ export function MediaSessionProvider({ children }: { children: ReactNode }) {
 }
 export function useMediaSession() {
   const session = useContext(SessionContext);
-  if (!session) throw new Error('缺少实况图素材会话。');
+  if (!session) throw new Error('The media session is unavailable.');
   return session;
 }
 export function useBlobUrl(blob: Blob | undefined) {

@@ -39,7 +39,7 @@ export default function LivePhotoView({ data, nodeKey }: { data: LivePhotoData; 
     setError(''); player.currentTime = 0; setPlaying(true);
     void player.play().catch((cause: unknown) => {
       if (cause instanceof DOMException && cause.name === 'AbortError') return;
-      if (active.current) { setPlaying(false); setError('视频无法播放，封面仍可正常编辑。'); }
+      if (active.current) { setPlaying(false); setError('The video could not be played. You can still edit the cover image.'); }
     });
   }
   function pointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -77,7 +77,7 @@ export default function LivePhotoView({ data, nodeKey }: { data: LivePhotoData; 
         const node = $getNodeByKey(nodeKey);
         if (node instanceof LivePhotoNode) node.setVideoSrc(videoSrc);
       }, { tag: HISTORY_PUSH_TAG });
-    } catch (cause) { if (active.current) setError(cause instanceof Error ? cause.message : '替换视频失败。'); }
+    } catch (cause) { if (active.current) setError(cause instanceof Error ? cause.message : 'Could not replace the video.'); }
     finally { busy.current = false; }
   }
   async function download() {
@@ -92,11 +92,11 @@ export default function LivePhotoView({ data, nodeKey }: { data: LivePhotoData; 
             const local = session.files.get(src);
             if (local) return local;
             const response = await fetch(src, { signal: controller.current?.signal });
-            if (!response.ok) throw new Error('无法读取资源，检查地址和跨域设置。');
+            if (!response.ok) throw new Error('Could not read the media. Check the URL and cross-origin permissions.');
             return response.blob();
           };
           const [cover, clip] = await Promise.all([read(data.src), read(data.videoSrc)]);
-          if (cover.size > 20 * 1024 * 1024 || clip.size > 100 * 1024 * 1024) throw new Error('素材超过图片 20 MB / 视频 100 MB 的限制。');
+          if (cover.size > 20 * 1024 * 1024 || clip.size > 100 * 1024 * 1024) throw new Error('Media exceeds the 20 MB image or 100 MB video limit.');
           const image = (await readImage(new File([cover], 'cover.jpg'))).blob;
           const blob = await createMotionPhoto(image, clip);
           if (!active.current) return;
@@ -107,26 +107,26 @@ export default function LivePhotoView({ data, nodeKey }: { data: LivePhotoData; 
       if (downloadCache.current) {
         const link = document.createElement('a'); link.href = downloadCache.current.url; link.download = data.fileName; link.click();
       }
-    } catch (cause) { if (active.current) setError(cause instanceof Error ? cause.message : '实况图导出失败。'); }
+    } catch (cause) { if (active.current) setError(cause instanceof Error ? cause.message : 'Could not export the live photo.'); }
     finally { busy.current = false; }
   }
 
   return <ImageEditExtensionsProvider value={{
     onDownload: download,
     mediaOverlay: <>
-      <video ref={attachVideo} src={data.videoSrc} playsInline muted={muted} preload="none" onEnded={stop} onError={() => { stop(); setError('视频加载失败，请从图片操作栏替换视频。'); }} {...stylex.props(s.video, playing && s.visible)} />
-      <button type="button" data-image-action aria-label="按住播放实况图" title="按住播放实况图" {...stylex.props(s.badge)}
+      <video ref={attachVideo} src={data.videoSrc} playsInline muted={muted} preload="none" onEnded={stop} onError={() => { stop(); setError('The video could not be loaded. Use Replace video in the image toolbar.'); }} {...stylex.props(s.video, playing && s.visible)} />
+      <button type="button" data-image-action aria-label="Press and hold to play" title="Press and hold to play" {...stylex.props(s.badge)}
         onKeyDown={event => { if ([' ', 'Enter'].includes(event.key) && !event.repeat) { event.preventDefault(); event.stopPropagation(); play(); } }}
-        onKeyUp={event => { if ([' ', 'Enter'].includes(event.key)) { event.preventDefault(); event.stopPropagation(); stop(); } }} onBlur={stop}><Radio size={12} />{playing ? '播放中' : 'LIVE'}</button>
+        onKeyUp={event => { if ([' ', 'Enter'].includes(event.key)) { event.preventDefault(); event.stopPropagation(); stop(); } }} onBlur={stop}><Radio size={12} />{playing ? 'PLAYING' : 'LIVE'}</button>
     </>,
     renderToolbarActions: className => <>
-      <button type="button" className={className} title="Replace video" aria-label="替换视频" onMouseDown={event => { event.preventDefault(); event.stopPropagation(); }} onClick={() => fileInput.current?.click()}><Film size={14} /></button>
-      <button type="button" className={className} title={muted ? 'Unmute live photo' : 'Mute live photo'} aria-label={muted ? '开启实况声音' : '静音'} aria-pressed={!muted} onMouseDown={event => { event.preventDefault(); event.stopPropagation(); }} onClick={() => setMuted(!muted)}>{muted ? <VolumeX size={14} /> : <Volume2 size={14} />}</button>
+      <button type="button" className={className} title="Replace video" aria-label="Replace video" onMouseDown={event => { event.preventDefault(); event.stopPropagation(); }} onClick={() => fileInput.current?.click()}><Film size={14} /></button>
+      <button type="button" className={className} title={muted ? 'Unmute live photo' : 'Mute live photo'} aria-label={muted ? 'Unmute live photo' : 'Mute live photo'} aria-pressed={!muted} onMouseDown={event => { event.preventDefault(); event.stopPropagation(); }} onClick={() => setMuted(!muted)}>{muted ? <VolumeX size={14} /> : <Volume2 size={14} />}</button>
     </>,
   }}>
     <div ref={wrapper} onPointerDownCapture={pointerDown} onPointerMoveCapture={pointerMove} onPointerLeave={stop} onDragStartCapture={stop} onContextMenuCapture={event => { if (hold.current) event.preventDefault(); }}>
       <ImageEditRenderer src={data.src} altText={data.altText} width={data.width} height={data.height} caption={data.caption} thumbhash={data.thumbhash} accent={data.accent} />
-      <input ref={fileInput} type="file" hidden aria-label="选择替换视频" accept="video/mp4,.mp4" onChange={event => { void replaceVideo(event.target.files?.[0]); event.target.value = ''; }} />
+      <input ref={fileInput} type="file" hidden aria-label="Replacement video" accept="video/mp4,.mp4" onChange={event => { void replaceVideo(event.target.files?.[0]); event.target.value = ''; }} />
       {error && <p role="alert" {...stylex.props(s.error)}>{error}</p>}
     </div>
   </ImageEditExtensionsProvider>;

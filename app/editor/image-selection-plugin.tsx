@@ -60,7 +60,7 @@ export function ImageSelectionPlugin() {
 }
 const styles = stylex.create({
   selected: {
-    outlineWidth: 2, outlineStyle: 'solid', outlineColor: '#748bdb', outlineOffset: 2,
-    '::after': { content: '""', position: 'absolute', inset: 0, backgroundColor: '#b6cbe644', pointerEvents: 'none', zIndex: 2 },
+    outlineWidth: 2, outlineStyle: 'solid', outlineColor: 'var(--rc-accent)', outlineOffset: 2,
+    '::after': { content: '""', position: 'absolute', inset: 0, backgroundColor: 'var(--rc-accent-light)', pointerEvents: 'none', zIndex: 2 },
   },
 });

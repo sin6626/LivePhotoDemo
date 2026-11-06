@@ -1,5 +1,5 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 687b45329d431ce70ec92742e3d3ad0e120cc4d0..4d625db7474ad19f4971396f8593a78d0a3dde93 100644
+index 687b453..b02d332 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -1,12 +1,12 @@
@@ -19,6 +19,33 @@ index 687b45329d431ce70ec92742e3d3ad0e120cc4d0..4d625db7474ad19f4971396f8593a78d
  import { ChevronDown, Pilcrow, Heading1, Heading2, Heading3, Undo, Redo, Bold, Italic, Underline, Strikethrough, Code, Highlighter, List, ListOrdered, ListChecks, AlignLeft, AlignCenter, AlignRight, AlignJustify, Ellipsis } from "lucide-react";
  import { useState, useMemo, useCallback, useEffect } from "react";
  var toolbarContainer = "_1e1ersc0";
+@@ -132,7 +132,7 @@ function ToolbarSeparator() {
+ const ICON_SIZE = 15;
+ const ICON_STROKE = 2;
+ const FONT_FAMILIES = [
+-  { label: "默认", value: "" },
++  { label: "Default", value: "" },
+   {
+     label: "宋体",
+     value: '"Noto Serif CJK SC", "Source Han Serif SC", SimSun, serif'
+@@ -147,7 +147,7 @@ const FONT_FAMILIES = [
+   { label: "Mono", value: 'ui-monospace, "SF Mono", "Fira Code", monospace' }
+ ];
+ function getFontLabel(fontFamily) {
+-  if (!fontFamily) return "默认";
++  if (!fontFamily) return "Default";
+   const match = FONT_FAMILIES.find((f) => f.value === fontFamily);
+   if (match) return match.label;
+   for (const def of FONT_FAMILIES) {
+@@ -155,7 +155,7 @@ function getFontLabel(fontFamily) {
+       return def.label;
+     }
+   }
+-  return "默认";
++  return "Default";
+ }
+ const BLOCK_TYPE_LABELS = {
+   paragraph: "Text",
 @@ -203,7 +203,8 @@ function ToolbarPlugin({
    maxVisibleInsertItems = DEFAULT_MAX_VISIBLE_INSERT_ITEMS,
    insertItemOrder
