@@ -1,0 +1,332 @@
+diff --git a/dist/ExcalidrawNode-DEcONli3.js b/dist/ExcalidrawNode-DEcONli3.js
+index 5f37876e154758bfbf9e8d7fc8f7af5176ec581c..05b74582a78106433aec5558abd9c40067b6a87d 100644
+--- a/dist/ExcalidrawNode-DEcONli3.js
++++ b/dist/ExcalidrawNode-DEcONli3.js
+@@ -219,7 +219,9 @@ const ExcalidrawExpandContent = ({ dismiss, ExcalidrawComponent, data, theme })
+         theme,
+         excalidrawAPI: (api) => {
+           apiRef.current = api;
+-          setTimeout(() => api.scrollToContent(), 100);
++          setTimeout(() => {
++            if (apiRef.current === api) api.scrollToContent();
++          }, 100);
+         }
+       }
+     ) })
+@@ -292,7 +294,9 @@ const ExcalidrawStaticCanvas = ({ snapshot, theme }) => {
+                 theme,
+                 excalidrawAPI: (api) => {
+                   apiRef.current = api;
+-                  setTimeout(() => api.scrollToContent(), 100);
++                  setTimeout(() => {
++                    if (apiRef.current === api) api.scrollToContent();
++                  }, 100);
+                 }
+               }
+             )
+diff --git a/dist/index.mjs b/dist/index.mjs
+index b0fb857c6789c96386e10a5041a76263bc9c1277..533e97fa953d8c6b8e6b91285c7b88234333684d 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -85,7 +85,10 @@ function $createExcalidrawEditNode(snapshot) {
+ function $isExcalidrawEditNode(node) {
+   return node instanceof ExcalidrawEditNode;
+ }
+-const SAVE_DEBOUNCE_MS = 2e3;
++const snapshotFingerprint = (mode, doc) => JSON.stringify([mode, {
++  ...doc,
++  elements: doc.elements.map(({ version, versionNonce, updated, ...element }) => element)
++}]);
+ const ExcalidrawEditorDialogContent = ({
+   dismiss,
+   ExcalidrawComponent,
+@@ -100,11 +103,12 @@ const ExcalidrawEditorDialogContent = ({
+ }) => {
+   const { className: portalClassName } = usePortalTheme();
+   const apiRef = useRef(null);
+-  const saveTimerRef = useRef(void 0);
+   const [isDirty, setIsDirty] = useState(false);
+   const isDirtyRef = useRef(false);
+   const confirmDialogOpenRef = useRef(false);
+-  const initializedRef = useRef(false);
++  const baselineRef = useRef(null);
++  const savingRef = useRef(false);
++  const [saveError, setSaveError] = useState("");
+   const baseRefRef = useRef(baseRef);
+   const baseDataRef = useRef(baseData);
+   const [storageMode, setStorageMode] = useState(() => {
+@@ -119,11 +123,6 @@ const ExcalidrawEditorDialogContent = ({
+     return "";
+   });
+   const [isSaving, setIsSaving] = useState(false);
+-  useEffect(() => {
+-    return () => {
+-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+-    };
+-  }, []);
+   const getSnapshot = useCallback(() => {
+     const api = apiRef.current;
+     if (!api) return;
+@@ -132,117 +131,68 @@ const ExcalidrawEditorDialogContent = ({
+       elements: api.getSceneElements(),
+       appState: {
+         viewBackgroundColor: appState.viewBackgroundColor,
+-        gridSize: appState.gridSize
++        gridSize: appState.gridSize,
++        gridModeEnabled: appState.gridModeEnabled,
++        gridStep: appState.gridStep
+       },
+       files: api.getFiles()
+     };
+   }, []);
+-  const performSave = useCallback(() => {
+-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+-    const doc = getSnapshot();
+-    if (!doc) return Promise.resolve();
+-    const mode = storageModeRef.current;
+-    if (mode === "delta" && saveSnapshot) {
+-      setIsSaving(true);
+-      return (async () => {
+-        try {
+-          const currentBaseUrl = baseRefRef.current;
+-          const currentBaseData = baseDataRef.current;
+-          if (!currentBaseUrl || !currentBaseData) {
+-            const ref = await saveSnapshot(doc, baseRefRef.current || void 0);
+-            baseRefRef.current = ref;
+-            baseDataRef.current = doc;
+-            setSavedRef(ref);
+-          }
+-          isDirtyRef.current = false;
+-          setIsDirty(false);
+-        } finally {
+-          setIsSaving(false);
+-        }
+-      })();
+-    }
+-    if (mode === "remote" && saveSnapshot) {
+-      if (baseRefRef.current && baseDataRef.current && JSON.stringify(doc) === JSON.stringify(baseDataRef.current)) {
+-        isDirtyRef.current = false;
+-        setIsDirty(false);
+-        return Promise.resolve();
+-      }
+-      setIsSaving(true);
+-      return saveSnapshot(doc, baseRefRef.current || void 0).then(
+-        (ref) => {
+-          baseRefRef.current = ref;
+-          baseDataRef.current = doc;
+-          isDirtyRef.current = false;
+-          setIsDirty(false);
+-          setIsSaving(false);
+-          setSavedRef(ref);
+-        },
+-        () => {
+-          setIsSaving(false);
+-        }
+-      );
+-    }
+-    isDirtyRef.current = false;
+-    setIsDirty(false);
+-    return Promise.resolve();
+-  }, [saveSnapshot, getSnapshot]);
+-  const emitSnapshot = useCallback(async () => {
+-    const doc = getSnapshot();
++  const updateDirty = useCallback((doc) => {
+     if (!doc) return;
++    const fingerprint = snapshotFingerprint(storageModeRef.current, doc);
++    if (baselineRef.current === null) baselineRef.current = fingerprint;
++    isDirtyRef.current = fingerprint !== baselineRef.current;
++    setIsDirty(isDirtyRef.current);
++  }, []);
++  const performSave = useCallback(async () => {
++    if (savingRef.current) return false;
++    const current = getSnapshot();
++    if (!current) return false;
++    if (!isDirtyRef.current) return true;
++    const doc = structuredClone(current);
+     const mode = storageModeRef.current;
+-    if (mode === "delta" && saveSnapshot) {
+-      const currentBaseUrl = baseRefRef.current;
+-      const currentBaseData = baseDataRef.current;
+-      if (currentBaseUrl && currentBaseData) {
++    savingRef.current = true;
++    setIsSaving(true);
++    setSaveError("");
++    try {
++      let snapshot;
++      if (mode === "delta" && saveSnapshot && baseRefRef.current && baseDataRef.current) {
+         const { diff } = await import("jsondiffpatch");
+-        const delta = diff(currentBaseData, structuredClone(doc));
+-        onSave(
+-          delta ? { type: "delta", baseUrl: currentBaseUrl, delta } : { type: "remote", url: currentBaseUrl }
+-        );
++        const delta = diff(baseDataRef.current, doc);
++        snapshot = delta ? { type: "delta", baseUrl: baseRefRef.current, delta } : { type: "remote", url: baseRefRef.current };
++      } else if (mode !== "inline" && saveSnapshot) {
++        const ref = await saveSnapshot(doc);
++        snapshot = { type: "remote", url: ref };
+       } else {
+-        const ref = await saveSnapshot(doc, baseRefRef.current || void 0);
+-        onSave({ type: "remote", url: ref });
++        snapshot = { type: "inline", data: doc };
+       }
+-      return;
+-    }
+-    if (mode === "remote") {
+-      const ref = baseRefRef.current;
+-      if (ref) {
+-        onSave({ type: "remote", url: ref });
+-      } else if (saveSnapshot) {
+-        const newRef = await saveSnapshot(doc);
+-        onSave({ type: "remote", url: newRef });
++      onSave(snapshot);
++      onClose(doc);
++      if (snapshot.type === "remote") {
++        baseRefRef.current = snapshot.url;
++        baseDataRef.current = doc;
++        setSavedRef(snapshot.url);
+       }
+-      return;
++      baselineRef.current = snapshotFingerprint(mode, doc);
++      updateDirty(getSnapshot());
++      return true;
++    } catch {
++      setSaveError("Could not save whiteboard. Your changes are still here.");
++      return false;
++    } finally {
++      savingRef.current = false;
++      setIsSaving(false);
+     }
+-    onSave({ type: "inline", data: doc });
+-  }, [onSave, saveSnapshot, getSnapshot]);
+-  const handleChange = useCallback(
+-    (elements) => {
+-      if (!initializedRef.current) {
+-        initializedRef.current = true;
+-        return;
+-      }
+-      if (elements.length === 0) return;
+-      if (!isDirtyRef.current) {
+-        isDirtyRef.current = true;
+-        setIsDirty(true);
+-      }
+-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+-      saveTimerRef.current = setTimeout(() => performSave(), SAVE_DEBOUNCE_MS);
+-    },
+-    [performSave]
+-  );
+-  const handleSaveAndClose = useCallback(() => {
+-    void performSave().then(async () => {
+-      await emitSnapshot();
+-      onClose(getSnapshot());
+-      dismiss();
+-    });
+-  }, [performSave, emitSnapshot, getSnapshot, onClose, dismiss]);
++  }, [saveSnapshot, getSnapshot, onSave, onClose, updateDirty]);
++  const handleChange = useCallback((elements, appState, files) => {
++    updateDirty({ elements: elements.filter((element) => !element.isDeleted), appState: { viewBackgroundColor: appState.viewBackgroundColor, gridSize: appState.gridSize, gridModeEnabled: appState.gridModeEnabled, gridStep: appState.gridStep }, files });
++  }, [updateDirty]);
++  const handleSaveAndClose = useCallback(async () => {
++    if (await performSave() && !isDirtyRef.current) dismiss();
++  }, [performSave, dismiss]);
+   const handleDiscard = useCallback(() => {
+-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+-    dismiss();
++    if (!savingRef.current) dismiss();
+   }, [dismiss]);
+   const showConfirmDialog = useCallback(() => {
+     if (confirmDialogOpenRef.current) return;
+@@ -290,15 +240,10 @@ const ExcalidrawEditorDialogContent = ({
+     });
+   }, [handleDiscard, handleSaveAndClose, portalClassName, theme]);
+   const attemptClose = useCallback(() => {
+-    if (isDirtyRef.current) {
+-      showConfirmDialog();
+-    } else {
+-      void emitSnapshot().then(() => {
+-        onClose(getSnapshot());
+-        dismiss();
+-      });
+-    }
+-  }, [dismiss, showConfirmDialog, emitSnapshot, getSnapshot, onClose]);
++    if (savingRef.current) return;
++    if (isDirtyRef.current) showConfirmDialog();
++    else dismiss();
++  }, [dismiss, showConfirmDialog]);
+   useEffect(() => {
+     const handleKeyDown = (e) => {
+       if (e.key === "Escape") {
+@@ -336,27 +281,20 @@ const ExcalidrawEditorDialogContent = ({
+     if (!doc) return;
+     void navigator.clipboard.writeText(JSON.stringify(doc));
+   }, [getSnapshot]);
+-  const handleRefChange = useCallback((e) => {
+-    const { value } = e.target;
+-    setSavedRef(value);
+-    baseRefRef.current = value;
+-    baseDataRef.current = void 0;
+-  }, []);
+-  const handleStorageModeChange = useCallback(
+-    (newMode) => {
+-      setStorageMode(newMode);
+-      storageModeRef.current = newMode;
+-      if (newMode === "inline") setSavedRef("");
+-      performSave();
+-    },
+-    [performSave]
+-  );
++  const handleStorageModeChange = useCallback((newMode) => {
++    if (savingRef.current) return;
++    setStorageMode(newMode);
++    storageModeRef.current = newMode;
++    updateDirty(getSnapshot());
++  }, [getSnapshot, updateDirty]);
+   return /* @__PURE__ */ jsxs(Fragment, { children: [
+     /* @__PURE__ */ jsxs("div", { className: excalidrawDialogHeader, children: [
+       /* @__PURE__ */ jsx(
+         "span",
+         {
+           className: excalidrawStatusDot,
++          role: "status",
++          "aria-label": isDirty ? "Whiteboard has unsaved changes" : "Whiteboard saved",
+           style: { backgroundColor: isDirty ? "#f59e0b" : "#22c55e" }
+         }
+       ),
+@@ -410,13 +348,15 @@ const ExcalidrawEditorDialogContent = ({
+               spellCheck: false,
+               type: "text",
+               value: savedRef,
+-              onChange: handleRefChange
++              readOnly: true,
++              "aria-label": "Saved whiteboard reference"
+             }
+           )
+         ] })
+       ] }),
+       /* @__PURE__ */ jsx("button", { className: excalidrawHeaderClose, type: "button", onClick: attemptClose, children: /* @__PURE__ */ jsx(X, { size: 18 }) })
+     ] }),
++    saveError && /* @__PURE__ */ jsx("div", { role: "alert", children: saveError }),
+     /* @__PURE__ */ jsx("div", { className: excalidrawDialogCanvas, children: /* @__PURE__ */ jsx(
+       ExcalidrawComponent,
+       {
+@@ -456,8 +396,9 @@ const ExcalidrawEditRenderer = ({
+   snapshotRef.current = snapshot;
+   const { className: portalClassName } = usePortalTheme();
+   useEffect(() => {
+-    if (initialData && !initialDataRef.current) {
++    if (initialData) {
+       initialDataRef.current = initialData;
++      setPreviewKey((key) => key + 1);
+     }
+   }, [initialData]);
+   useEffect(() => {
+@@ -523,7 +464,9 @@ const ExcalidrawEditRenderer = ({
+         theme,
+         excalidrawAPI: (api) => {
+           previewApiRef.current = api;
+-          setTimeout(() => api.scrollToContent(), 100);
++          setTimeout(() => {
++            if (previewApiRef.current === api) api.scrollToContent();
++          }, 100);
+         }
+       },
+       previewKey

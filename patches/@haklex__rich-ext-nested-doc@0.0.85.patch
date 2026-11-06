@@ -1,0 +1,155 @@
+diff --git a/dist/NestedDocEditDecorator.d.ts b/dist/NestedDocEditDecorator.d.ts
+index ae670ae309631ce98139da2d4a970b962ba60263..c5b53ebcb72eed1e0deb114af919c0c87b0418f1 100644
+--- a/dist/NestedDocEditDecorator.d.ts
++++ b/dist/NestedDocEditDecorator.d.ts
+@@ -1,9 +1,8 @@
+-import { LexicalEditor, SerializedEditorState } from 'lexical';
++import { SerializedEditorState } from 'lexical';
+ interface NestedDocEditDecoratorProps {
+-    contentEditor: LexicalEditor;
+     contentState: SerializedEditorState;
+     nodeKey: string;
+ }
+-export declare function NestedDocEditDecorator({ nodeKey, contentEditor, contentState, }: NestedDocEditDecoratorProps): import("react/jsx-runtime").JSX.Element;
++export declare function NestedDocEditDecorator({ nodeKey, contentState, }: NestedDocEditDecoratorProps): import("react/jsx-runtime").JSX.Element;
+ export {};
+ //# sourceMappingURL=NestedDocEditDecorator.d.ts.map
+\ No newline at end of file
+diff --git a/dist/NestedDocEditNode.d.ts b/dist/NestedDocEditNode.d.ts
+index d6522bddf6764667f09fd967a787afe8513478c2..256412227074373e363df7c74f01ca11e3cb13b2 100644
+--- a/dist/NestedDocEditNode.d.ts
++++ b/dist/NestedDocEditNode.d.ts
+@@ -3,13 +3,10 @@ import { EditorConfig, LexicalEditor, SerializedEditorState } from 'lexical';
+ import { ReactElement } from 'react';
+ import { NestedDocNode, SerializedNestedDocNode } from './NestedDocNode';
+ export declare class NestedDocEditNode extends NestedDocNode {
+-    __contentEditor: LexicalEditor;
+     static commandItems: CommandItemConfig[];
+     static clone(node: NestedDocEditNode): NestedDocEditNode;
+     constructor(contentState?: SerializedEditorState, key?: string);
+-    getContentEditor(): LexicalEditor;
+     static importJSON(serializedNode: SerializedNestedDocNode): NestedDocEditNode;
+-    exportJSON(): SerializedNestedDocNode;
+     decorate(_editor: LexicalEditor, _config: EditorConfig): ReactElement;
+ }
+ export declare function $createNestedDocEditNode(contentState?: SerializedEditorState): NestedDocEditNode;
+diff --git a/dist/index.mjs b/dist/index.mjs
+index bc0f53973bd70b86025dc616b4886a85064aa2f4..8ba8ba9b14a1685ae818f061e20cb1ece40afb88 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -3,9 +3,8 @@ var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { en
+ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+ import { t as truncateEditorState, h as hasRenderableEditorState, d as dialogPopup, e as editOverlayRoot, r as rendererContent, p as previewSurface, N as NestedDocRenderer, a as previewEmpty, b as editOverlay, $ as $isNestedDocNode, c as dialogShell, f as dialogHeader, g as dialogHeaderLeft, i as dialogTitle, j as dialogHeaderRight, k as dialogHeaderCloseBtn, l as editorArea, m as dialogFooter, n as NestedDocNode } from "./transformer-CeHuyTaK.js";
+ import { o, q, s } from "./transformer-CeHuyTaK.js";
+-import { useColorScheme, editorTheme } from "@haklex/rich-editor";
+-import { getResolvedEditNodes } from "@haklex/rich-editor/nodes";
+-import { $getNodeByKey, $insertNodes, createEditor, createCommand, COMMAND_PRIORITY_EDITOR } from "lexical";
++import { useColorScheme } from "@haklex/rich-editor";
++import { $getNodeByKey, $insertNodes, createCommand, COMMAND_PRIORITY_EDITOR } from "lexical";
+ import { Pencil, FileText, X } from "lucide-react";
+ import { createContext, use, useMemo, useCallback, useRef, useState, createElement, useEffect } from "react";
+ import { jsx, jsxs } from "react/jsx-runtime";
+@@ -41,7 +40,6 @@ const EMPTY_EDITOR_STATE = {
+ };
+ function NestedDocEditDecorator({
+   nodeKey,
+-  contentEditor,
+   contentState
+ }) {
+   const [editor] = useLexicalComposerContext();
+@@ -61,8 +59,7 @@ function NestedDocEditDecorator({
+         NestedDocDialogContent,
+         {
+           DialogEditor,
+-          contentEditor,
+-          initialState: contentEditor.getEditorState().toJSON(),
++          initialState: contentState,
+           nodeKey,
+           parentEditor: editor,
+           onDismiss: dismiss
+@@ -74,7 +71,7 @@ function NestedDocEditDecorator({
+       showCloseButton: false,
+       clickOutsideToDismiss: false
+     });
+-  }, [DialogEditor, colorScheme, contentEditor, editor, nodeKey, portalClassName]);
++  }, [DialogEditor, colorScheme, contentState, editor, nodeKey, portalClassName]);
+   return /* @__PURE__ */ jsxs(
+     "div",
+     {
+@@ -100,7 +97,6 @@ function NestedDocDialogContent({
+   initialState,
+   parentEditor,
+   nodeKey,
+-  contentEditor,
+   onDismiss,
+   DialogEditor
+ }) {
+@@ -111,8 +107,6 @@ function NestedDocDialogContent({
+     const dialogEditor = dialogEditorRef.current;
+     if (dialogEditor) {
+       const newState = dialogEditor.getEditorState().toJSON();
+-      const parsed = contentEditor.parseEditorState(newState);
+-      contentEditor.setEditorState(parsed);
+       parentEditor.update(() => {
+         const node = $getNodeByKey(nodeKey);
+         if ($isNestedDocNode(node)) {
+@@ -121,7 +115,7 @@ function NestedDocDialogContent({
+       });
+     }
+     onDismiss();
+-  }, [contentEditor, nodeKey, onDismiss, parentEditor]);
++  }, [nodeKey, onDismiss, parentEditor]);
+   const handleKeyDownCapture = useCallback(
+     (event) => {
+       const isModifier = event.metaKey || event.ctrlKey;
+@@ -160,49 +154,16 @@ function NestedDocDialogContent({
+     ] }) })
+   ] });
+ }
+-function createContentEditor() {
+-  return createEditor({
+-    namespace: "NestedDocContent",
+-    nodes: getResolvedEditNodes(),
+-    theme: editorTheme,
+-    onError: (error) => {
+-      console.error("[NestedDocContent]", error);
+-    }
+-  });
+-}
+ const _NestedDocEditNode = class _NestedDocEditNode extends NestedDocNode {
+-  constructor(contentState, key) {
+-    super(contentState, key);
+-    __publicField(this, "__contentEditor");
+-    this.__contentEditor = createContentEditor();
+-    if (contentState) {
+-      const editorState = this.__contentEditor.parseEditorState(contentState);
+-      this.__contentEditor.setEditorState(editorState);
+-    }
+-  }
+   static clone(node) {
+-    const cloned = new _NestedDocEditNode(node.__contentState, node.__key);
+-    cloned.__contentEditor = node.__contentEditor;
+-    return cloned;
+-  }
+-  getContentEditor() {
+-    return this.__contentEditor;
++    return new _NestedDocEditNode(node.__contentState, node.__key);
+   }
+   static importJSON(serializedNode) {
+     return new _NestedDocEditNode(serializedNode.content);
+   }
+-  exportJSON() {
+-    return {
+-      ...super.exportJSON(),
+-      type: "nested-doc",
+-      content: this.__contentEditor.getEditorState().toJSON(),
+-      version: 1
+-    };
+-  }
+   decorate(_editor, _config) {
+     return createElement(NestedDocEditDecorator, {
+       nodeKey: this.__key,
+-      contentEditor: this.__contentEditor,
+       contentState: this.__contentState
+     });
+   }

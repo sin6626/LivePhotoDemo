@@ -1,0 +1,12 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index b84ff39b6114576c16b10dbeee58c53a22091c23..9f872f2c8d27a924235db3d2b28ce4003761f998 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -179,6 +179,7 @@ function FloatingLinkEditorPlugin({
+     PopoverPopup,
+     {
+       className: `${panel} ${semanticClassNames.panel}`,
++      initialFocus: false,
+       onBlur: handlePanelFocusOut,
+       onFocus: handlePanelFocusIn,
+       children: [

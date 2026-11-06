@@ -1,0 +1,2 @@
+# Unified diff 的空白上下文行必须保留，补丁与博客原件一致。
+patches/*.patch -whitespace

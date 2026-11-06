@@ -1,0 +1,100 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 687b45329d431ce70ec92742e3d3ad0e120cc4d0..4d625db7474ad19f4971396f8593a78d0a3dde93 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1,12 +1,12 @@
+ import { jsx, jsxs, Fragment } from "react/jsx-runtime";
+-import { collectCommandItems } from "@haklex/rich-editor/commands";
++import { collectCommandItems, $setRichBlocksType } from "@haklex/rich-editor/commands";
+ import { TooltipTrigger, TooltipRoot, TooltipContent, DropdownMenuContent, DropdownMenuItem, DropdownMenu, DropdownMenuTrigger, createTooltipHandle, TooltipProvider } from "@haklex/rich-editor-ui";
+ import { $isListNode, INSERT_UNORDERED_LIST_COMMAND, INSERT_ORDERED_LIST_COMMAND, INSERT_CHECK_LIST_COMMAND } from "@lexical/list";
+ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+-import { $createHeadingNode, $isHeadingNode } from "@lexical/rich-text";
+-import { $getSelectionStyleValueForProperty, $patchStyleText, $setBlocksType } from "@lexical/selection";
++import { $isHeadingNode } from "@lexical/rich-text";
++import { $getSelectionStyleValueForProperty, $patchStyleText } from "@lexical/selection";
+ import { $findMatchingParent } from "@lexical/utils";
+-import { $getSelection, $isRangeSelection, $isRootOrShadowRoot, $isElementNode, CAN_UNDO_COMMAND, COMMAND_PRIORITY_LOW, CAN_REDO_COMMAND, $createParagraphNode, UNDO_COMMAND, REDO_COMMAND, FORMAT_TEXT_COMMAND, FORMAT_ELEMENT_COMMAND } from "lexical";
++import { $getSelection, $isRangeSelection, $isRootOrShadowRoot, $isElementNode, CAN_UNDO_COMMAND, COMMAND_PRIORITY_LOW, CAN_REDO_COMMAND, UNDO_COMMAND, REDO_COMMAND, FORMAT_TEXT_COMMAND, FORMAT_ELEMENT_COMMAND, SELECTION_CHANGE_COMMAND } from "lexical";
+ import { ChevronDown, Pilcrow, Heading1, Heading2, Heading3, Undo, Redo, Bold, Italic, Underline, Strikethrough, Code, Highlighter, List, ListOrdered, ListChecks, AlignLeft, AlignCenter, AlignRight, AlignJustify, Ellipsis } from "lucide-react";
+ import { useState, useMemo, useCallback, useEffect } from "react";
+ var toolbarContainer = "_1e1ersc0";
+@@ -203,7 +203,8 @@ function ToolbarPlugin({
+   maxVisibleInsertItems = DEFAULT_MAX_VISIBLE_INSERT_ITEMS,
+   insertItemOrder
+ }) {
+-  const [editor] = useLexicalComposerContext();
++  const [rootEditor] = useLexicalComposerContext();
++  const [editor, setEditor] = useState(rootEditor);
+   const [state, setState] = useState(INITIAL_STATE);
+   const [tooltipHandle] = useState(() => createTooltipHandle());
+   const toolbarItems = useMemo(() => {
+@@ -247,8 +248,13 @@ function ToolbarPlugin({
+       isHighlight: selection.hasFormat("highlight")
+     }));
+   }, []);
++  useEffect(() => rootEditor.registerCommand(SELECTION_CHANGE_COMMAND, (_payload, activeEditor) => {
++    setEditor(activeEditor);
++    return false;
++  }, COMMAND_PRIORITY_LOW), [rootEditor]);
+   useEffect(() => {
+-    const unregisterUndo = editor.registerCommand(
++    editor.getEditorState().read(updateToolbar);
++    const unregisterUndo = rootEditor.registerCommand(
+       CAN_UNDO_COMMAND,
+       (payload) => {
+         setState((prev) => ({ ...prev, canUndo: payload }));
+@@ -256,7 +262,7 @@ function ToolbarPlugin({
+       },
+       COMMAND_PRIORITY_LOW
+     );
+-    const unregisterRedo = editor.registerCommand(
++    const unregisterRedo = rootEditor.registerCommand(
+       CAN_REDO_COMMAND,
+       (payload) => {
+         setState((prev) => ({ ...prev, canRedo: payload }));
+@@ -274,7 +280,7 @@ function ToolbarPlugin({
+       unregisterRedo();
+       unregisterUpdate();
+     };
+-  }, [editor, updateToolbar]);
++  }, [editor, rootEditor, updateToolbar]);
+   const applyFontFamily = useCallback(
+     (value) => {
+       editor.update(() => {
+@@ -305,7 +311,7 @@ function ToolbarPlugin({
+           editor.update(() => {
+             const selection = $getSelection();
+             if ($isRangeSelection(selection)) {
+-              $setBlocksType(selection, () => $createParagraphNode());
++              $setRichBlocksType(selection, "paragraph");
+             }
+           });
+         }
+@@ -318,7 +324,7 @@ function ToolbarPlugin({
+           editor.update(() => {
+             const selection = $getSelection();
+             if ($isRangeSelection(selection)) {
+-              $setBlocksType(selection, () => $createHeadingNode("h1"));
++              $setRichBlocksType(selection, "h1");
+             }
+           });
+         }
+@@ -331,7 +337,7 @@ function ToolbarPlugin({
+           editor.update(() => {
+             const selection = $getSelection();
+             if ($isRangeSelection(selection)) {
+-              $setBlocksType(selection, () => $createHeadingNode("h2"));
++              $setRichBlocksType(selection, "h2");
+             }
+           });
+         }
+@@ -344,7 +350,7 @@ function ToolbarPlugin({
+           editor.update(() => {
+             const selection = $getSelection();
+             if ($isRangeSelection(selection)) {
+-              $setBlocksType(selection, () => $createHeadingNode("h3"));
++              $setRichBlocksType(selection, "h3");
+             }
+           });
+         }

@@ -7,17 +7,28 @@
     "build": "react-router build",
     "start": "vite preview --outDir build/client --host 127.0.0.1",
     "typecheck": "react-router typegen && tsc --noEmit",
-    "test": "node --test tests/*.test.ts"
+    "test": "node --test tests/*.test.ts",
+    "postinstall": "node scripts/apply-editor-patches.mjs"
   },
   "dependencies": {
+    "@haklex/rich-editor": "0.0.85",
+    "@haklex/rich-editor-ui": "0.0.85",
+    "@haklex/rich-ext-nested-doc": "0.0.85",
+    "@haklex/rich-kit-shiro": "0.0.85",
+    "@haklex/rich-plugin-toolbar": "0.0.85",
+    "@lexical/react": "0.41.0",
+    "@lexical/selection": "0.41.0",
+    "@lexical/utils": "0.41.0",
     "@react-router/node": "^7.13.0",
     "@stylexjs/stylex": "^0.19.1",
     "isbot": "^5",
-    "lucide-react": "^0.577.0",
+    "lexical": "0.41.0",
+    "lucide-react": "0.574.0",
     "radix-ui": "^1.4.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router": "^7.13.0"
+    "react-router": "^7.13.0",
+    "shiki": "3.23.0"
   },
   "devDependencies": {
     "@react-router/dev": "^7.13.0",
@@ -27,5 +38,14 @@
     "@types/react-dom": "^19.2.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.0"
+  },
+  "overrides": {
+    "@lexical/code": "0.41.0",
+    "@excalidraw/excalidraw": {
+      ".": "0.18.1",
+      "@radix-ui/react-tabs": "1.1.2"
+    },
+    "shiki": "3.23.0",
+    "lucide-react": "$lucide-react"
   }
 }

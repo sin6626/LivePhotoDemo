@@ -1,0 +1,39 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index b1c70c6e3455ab177f0cdb217e643bfab22507ec..151f59aafe40d2b5bd86a7e86aacacb978ad56bf 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1,3 +1,4 @@
++import { $setRichBlocksType } from "@haklex/rich-editor/commands";
+ import { jsx, jsxs } from "react/jsx-runtime";
+ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuItem, DropdownMenuSeparator } from "@haklex/rich-editor-ui";
+ import { usePortalTheme } from "@haklex/rich-style-token";
+@@ -5,9 +6,8 @@ import { $createCodeNode } from "@lexical/code";
+ import { INSERT_CHECK_LIST_COMMAND, INSERT_ORDERED_LIST_COMMAND, INSERT_UNORDERED_LIST_COMMAND } from "@lexical/list";
+ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+ import { INSERT_HORIZONTAL_RULE_COMMAND } from "@lexical/react/LexicalHorizontalRuleNode";
+-import { $createQuoteNode, $createHeadingNode } from "@lexical/rich-text";
+ import { $setBlocksType } from "@lexical/selection";
+-import { $getNearestNodeFromDOMNode, $getNodeByKey, $createParagraphNode, $isElementNode, $getSelection, $isRangeSelection, DRAGOVER_COMMAND, COMMAND_PRIORITY_HIGH, DROP_COMMAND, DRAGSTART_COMMAND } from "lexical";
++import { $getNearestNodeFromDOMNode, $getNodeByKey, $isElementNode, $getSelection, $isRangeSelection, DRAGOVER_COMMAND, COMMAND_PRIORITY_HIGH, DROP_COMMAND, DRAGSTART_COMMAND } from "lexical";
+ import { Plus, GripVertical, Type, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, TextQuote, Minus, Code2, Copy, ArrowUp, ArrowDown, Trash2 } from "lucide-react";
+ import { useState, useRef, useCallback, useEffect } from "react";
+ import { createPortal } from "react-dom";
+@@ -260,16 +260,8 @@ function BlockHandleInner({ editor }) {
+         node.selectStart();
+         const sel = $getSelection();
+         if (!$isRangeSelection(sel)) return;
+-        const creators = {
+-          paragraph: () => $createParagraphNode(),
+-          h1: () => $createHeadingNode("h1"),
+-          h2: () => $createHeadingNode("h2"),
+-          h3: () => $createHeadingNode("h3"),
+-          quote: () => $createQuoteNode(),
+-          code: () => $createCodeNode()
+-        };
+-        const create = creators[type];
+-        if (create) $setBlocksType(sel, create);
++        if (type === "code") $setBlocksType(sel, () => $createCodeNode());
++        else if (["paragraph", "h1", "h2", "h3", "quote"].includes(type)) $setRichBlocksType(sel, type);
+       });
+     },
+     [editor, handle.nodeKey]

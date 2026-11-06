@@ -1,0 +1,117 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 705a6752eda23a0b2393541085a28c1f81e47970..83444cfc345bce7d64bbc6738ad444836208b359 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -3,16 +3,14 @@ var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { en
+ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+ import { INSERT_UNORDERED_LIST_COMMAND, INSERT_ORDERED_LIST_COMMAND, INSERT_CHECK_LIST_COMMAND } from "@lexical/list";
+ import { INSERT_HORIZONTAL_RULE_COMMAND } from "@lexical/react/LexicalHorizontalRuleNode";
+-import { $createHeadingNode, $createQuoteNode } from "@lexical/rich-text";
+-import { $setBlocksType } from "@lexical/selection";
+ import { INSERT_TABLE_COMMAND } from "@lexical/table";
+-import { $getSelection, $isRangeSelection, $createParagraphNode } from "lexical";
++import { $getSelection, $isRangeSelection, $isTextNode } from "lexical";
+ import { Type, Heading1, Heading2, Heading3, TextQuote, Minus, Table, List, ListOrdered, ListChecks } from "lucide-react";
+ import { createElement, useEffect, useMemo, useState, useCallback } from "react";
+ import { MenuOption, useBasicTypeaheadTriggerMatch, LexicalTypeaheadMenuPlugin } from "@lexical/react/LexicalTypeaheadMenuPlugin";
+ import { jsx, jsxs } from "react/jsx-runtime";
+ import { useFloating, autoUpdate, offset, flip, shift } from "@floating-ui/react-dom";
+-import { collectCommandItems } from "@haklex/rich-editor/commands";
++import { collectCommandItems, $setRichBlocksType } from "@haklex/rich-editor/commands";
+ import { PortalThemeWrapper } from "@haklex/rich-style-token";
+ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+ import { createPortal } from "react-dom";
+@@ -47,7 +45,7 @@ function getBuiltinItems() {
+         editor.update(() => {
+           const selection = $getSelection();
+           if ($isRangeSelection(selection)) {
+-            $setBlocksType(selection, () => $createParagraphNode());
++            $setRichBlocksType(selection, "paragraph");
+           }
+         });
+       }
+@@ -61,7 +59,7 @@ function getBuiltinItems() {
+         editor.update(() => {
+           const selection = $getSelection();
+           if ($isRangeSelection(selection)) {
+-            $setBlocksType(selection, () => $createHeadingNode("h1"));
++            $setRichBlocksType(selection, "h1");
+           }
+         });
+       }
+@@ -75,7 +73,7 @@ function getBuiltinItems() {
+         editor.update(() => {
+           const selection = $getSelection();
+           if ($isRangeSelection(selection)) {
+-            $setBlocksType(selection, () => $createHeadingNode("h2"));
++            $setRichBlocksType(selection, "h2");
+           }
+         });
+       }
+@@ -89,7 +87,7 @@ function getBuiltinItems() {
+         editor.update(() => {
+           const selection = $getSelection();
+           if ($isRangeSelection(selection)) {
+-            $setBlocksType(selection, () => $createHeadingNode("h3"));
++            $setRichBlocksType(selection, "h3");
+           }
+         });
+       }
+@@ -103,14 +101,7 @@ function getBuiltinItems() {
+         editor.update(() => {
+           const selection = $getSelection();
+           if (!$isRangeSelection(selection)) return;
+-          const anchorNode = selection.anchor.getNode();
+-          const element = anchorNode.getTopLevelElementOrThrow();
+-          const quoteNode = $createQuoteNode();
+-          const paragraph = $createParagraphNode();
+-          paragraph.append(...element.getChildren());
+-          quoteNode.append(paragraph);
+-          element.replace(quoteNode);
+-          paragraph.selectEnd();
++          $setRichBlocksType(selection, "quote");
+         });
+       }
+     }),
+@@ -275,19 +266,33 @@ function SlashMenuPlugin({ items, extraItems, triggerChar = "/" }) {
+     minLength: 0
+   });
+   const onSelectOption = useCallback(
+-    (option, textNodeContainingQuery, closeMenu, matchingString) => {
++    (option, textNodeContainingQuery, closeMenu) => {
+       editor.update(() => {
+-        if (textNodeContainingQuery) {
+-          const selection = $getSelection();
+-          if ($isRangeSelection(selection)) {
+-            textNodeContainingQuery.remove();
+-          }
++        const selection = $getSelection();
++        if (!$isRangeSelection(selection) || !selection.isCollapsed() || selection.anchor.type !== "text") return;
++        const anchor = selection.anchor.getNode();
++        if (!$isTextNode(anchor) || !anchor.isSimpleText()) return;
++        const previous = textNodeContainingQuery?.getKey() === anchor.getKey() ? anchor.getPreviousSibling() : null;
++        const prefix = $isTextNode(previous) && previous.isSimpleText() && previous.getFormat() === anchor.getFormat() && previous.getStyle() === anchor.getStyle()
++          ? previous : null;
++        const beforeCaret = anchor.getTextContent().slice(0, selection.anchor.offset);
++        const match = checkForTriggerMatch((prefix?.getTextContent() || "") + beforeCaret, editor);
++        if (!match) return;
++        const length = match.replaceableString.length;
++        if (length > beforeCaret.length) {
++          const prefixLength = length - beforeCaret.length;
++          prefix.spliceText(prefix.getTextContentSize() - prefixLength, prefixLength, "");
++          anchor.spliceText(0, beforeCaret.length, "", true);
++        } else {
++          anchor.spliceText(selection.anchor.offset - length, length, "", true);
+         }
++        if (anchor.getTextContentSize() === 0) anchor.remove();
++        if (prefix?.isAttached() && prefix.getTextContentSize() === 0) prefix.remove();
++        option.onSelect(editor, match.matchingString);
+       });
+       closeMenu();
+-      option.onSelect(editor, matchingString);
+     },
+-    [editor]
++    [editor, checkForTriggerMatch]
+   );
+   return /* @__PURE__ */ jsx(
+     LexicalTypeaheadMenuPlugin,

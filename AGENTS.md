@@ -13,11 +13,9 @@
 - 上下文压缩前更新本文档的状态和验证结果。
 
 ## 设计方向
-- 用途：本地验证图片与视频配对，导出后交给相册验证。
-- 气质：安静、直接、可检查。
-- 视觉：暖白照片工作台、石墨文字、绿色操作按钮。
-- 重点：双文件选择和可按住播放的大幅预览。
-- 细节：图片与视频两条素材轨道及配对状态。
+- 用户新要求：页面只保留 rich editor，复用 SinPersonalSpace 博客编辑器，插入 Live Photo 节点体验。
+- 同款 Haklex ShiroEditor 0.0.85 + Lexical 0.41.0，保留原工具栏、菜单和编辑样式。外层简洁白色编辑页面。
+- 不改博客仓库、不接博客 API。仅本地会话，刷新清空，页面明确提示。
 
 ## 当前状态
 用户已明确：先做 Google Motion Photo 原理，图片在前、视频追加在后，不做苹果 Live Photo。
@@ -35,3 +33,14 @@ React Router 7 Framework SPA、TypeScript、StyleX，shadcn/ui 的 Radix 组件�
 - StyleX 中使用 borderWidth/borderStyle/borderColor，不用会被丢弃的 border 简写。
 - `video.play()` 被松手 `pause()` 打断会产生 AbortError，属于正常操作，不应提示失败。
 - 无云端部署、无 GitHub 推送、无用户相册操作。手机相册识别仍未验证。
+
+## 富文本接入（2026-11-06）
+- `app/editor/blog-editor.tsx` 复用博客的 React 编辑器组合，去掉 Vue 与上传 API。复制 11 份同版本补丁并由 postinstall 幂等应用。
+- `live-photo-node.ts` 注册独立块节点，JSON 只放素材 ID 和基本信息，支持 commandItems 的工具栏与斜杠菜单入口。
+- `media-session.tsx` 持有素材 URL，卸载释放；删除节点后为撤销保留资源，整个会话最多 256 MB。生产持久化未实现。
+- 为所有延迟加载的编辑器入口显式配置 optimizeDeps，避免首次插入时 Vite 整页刷新丢失素材。
+- StyleX `cssInjectionTarget` 固定到 `assets/root-*.css`；否则生产时可能注入白板等延迟 CSS，页面壳和弹窗无样式。要实际打开生产预览验证，不能只看构建成功。
+- 3 项 Node 测试、类型检查通过；实测插入后继续输入、按住/松开播放、下载文件视频字节一致、删除/撤销/重做、斜杠菜单和 390px 无横向溢出。
+- 必须保留博客的 lucide-react 0.574.0 去重与 Excalidraw Radix Tabs 1.1.2 覆盖；多份图标库会使打包超 2 GB。npm 更改 overrides 后必要时 `npm dedupe --include=dev`，随后重跑 postinstall，不能只看配置假设已去重。
+- 去重后生产构建在 `NODE_OPTIONS=--max-old-space-size=2048` 下通过。只运行一套本地服务，结束验证后关闭测试浏览器；用户体验服务可以按明确要求保留。
+- 本轮验证范围为正文与实况图，不代表白板、嵌入等第三方功能全部重测。依赖沿用博客版本，尚未做完整生产安全升级。

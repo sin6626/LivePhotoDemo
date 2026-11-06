@@ -1,0 +1,212 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -3,7 +3,7 @@
+ import { PortalThemeProvider } from "@haklex/rich-style-token";
+ import { createHeadlessEditor } from "@lexical/headless";
+ import { $getRoot } from "lexical";
+-import { useRef, useEffect, createElement, useMemo, isValidElement, cloneElement } from "react";
++import { useRef, useEffect, createElement, useMemo, isValidElement, cloneElement, createContext, useContext } from "react";
+ import { Link } from "lucide-react";
+ function HtmlComment({ text }) {
+   const anchorRef = useRef(null);
+@@ -46,35 +46,18 @@
+ function textToSlug(text) {
+   return text.toLowerCase().trim().replaceAll(/[^\s\w\u3000-\u9FFF\uAC00-\uD7AF\uFF00-\uFFEF-]/g, "").replaceAll(/[\s_]+/g, "-").replaceAll(/^-+|-+$/g, "");
+ }
+-function extractText(node) {
+-  if (node.type === "comment") return "";
+-  if (node.text) return node.text;
+-  if (node.children) return node.children.map(extractText).join("");
+-  return "";
+-}
+-function renderBuiltinNode(node, key, children, headingSlugs, textContent) {
++function renderBuiltinNode(node, key, children, headingSlug) {
+   switch (node.type) {
+     case "root": {
+       return /* @__PURE__ */ jsx(Fragment, { children });
+     }
+     case "paragraph": {
+-      const align = node.format ? { textAlign: node.format } : void 0;
++      const align = { textAlign: node.format || undefined, paddingInlineStart: node.indent ? `${node.indent * 40}px` : undefined, direction: node.direction || undefined };
+       return /* @__PURE__ */ jsx("p", { className: shared$1("paragraph"), style: align, children }, key);
+     }
+     case "heading": {
+       const Tag = node.tag;
+-      const text = textContent || extractText(node);
+-      const baseSlug = textToSlug(text);
+-      let slug = baseSlug;
+-      if (baseSlug) {
+-        const count = headingSlugs.get(baseSlug);
+-        if (count !== void 0) {
+-          slug = `${baseSlug}-${count}`;
+-          headingSlugs.set(baseSlug, count + 1);
+-        } else {
+-          headingSlugs.set(baseSlug, 1);
+-        }
+-      }
++      const slug = headingSlug;
+       return /* @__PURE__ */ jsxs(Tag, { className: headingClassNames[Tag], id: slug || void 0, children: [
+         slug && /* @__PURE__ */ jsx("a", { className: shared$1("headingAnchor"), href: `#${slug}`, tabIndex: 0, children: /* @__PURE__ */ jsx(Link, { "aria-hidden": true, size: 14, strokeWidth: 2 }) }),
+         children
+@@ -128,7 +111,7 @@
+       return /* @__PURE__ */ jsx("hr", { className: shared$1("hr") }, key);
+     }
+     case "table": {
+-      return /* @__PURE__ */ jsx("div", { className: tableWrapper, children: /* @__PURE__ */ jsx("table", { className: table, children }) }, key);
++      return /* @__PURE__ */ jsx("div", { className: tableWrapper, children: /* @__PURE__ */ jsx("table", { className: table, children: jsx("tbody", { children }) }) }, key);
+     }
+     case "tablerow": {
+       return /* @__PURE__ */ jsx("tr", { children }, key);
+@@ -136,7 +119,7 @@
+     case "tablecell": {
+       const CellTag = node.headerState ? "th" : "td";
+       const cls = node.headerState ? tableHead : tableCell;
+-      return /* @__PURE__ */ jsx(CellTag, { className: cls, colSpan: node.colSpan > 1 ? node.colSpan : void 0, children }, key);
++      return /* @__PURE__ */ jsx(CellTag, { className: cls, colSpan: node.colSpan > 1 ? node.colSpan : void 0, rowSpan: node.rowSpan > 1 ? node.rowSpan : void 0, style: { backgroundColor: node.backgroundColor || undefined, verticalAlign: node.verticalAlign || undefined, width: node.width || undefined }, children }, key);
+     }
+     case "details": {
+       const summary = node.summary || "";
+@@ -337,7 +320,36 @@
+   }
+   return /* @__PURE__ */ jsx("div", { className: "rich-block-anchor", "data-block-id": blockId, children: element }, `${nodeKey}-block-anchor`);
+ }
+-function renderTree(node, editor, editorConfig, headingSlugs, key, blockId, builtinNodeOverrides) {
++const HeadingSlugsContext = createContext(null);
++function collectHeadingSlugs(editor, editorState, value) {
++  const slugs = new WeakMap();
++  const occupied = new Set();
++  const nextSuffix = new Map();
++  function walk(node, rawNode) {
++    if (node.getType() === "heading" && rawNode) {
++      const baseSlug = textToSlug(node.getTextContent());
++      let slug = baseSlug;
++      if (baseSlug) {
++        let suffix = nextSuffix.get(baseSlug) ?? 1;
++        while (occupied.has(slug)) slug = `${baseSlug}-${suffix++}`;
++        occupied.add(slug);
++        nextSuffix.set(baseSlug, suffix);
++      }
++      slugs.set(rawNode, slug);
++    }
++    node.getChildren?.().forEach((child, i) => walk(child, rawNode?.children?.[i]));
++    const serialized = node.exportJSON();
++    const nestedStates = [serialized.content, ...(serialized.cells ?? [])];
++    for (const state of nestedStates) {
++      if (state?.root) {
++        editor.parseEditorState(state).read(() => walk($getRoot(), state.root));
++      }
++    }
++  }
++  editorState.read(() => walk($getRoot(), value.root));
++  return slugs;
++}
++function renderTree(node, editor, editorConfig, headingSlugs, key, blockId, builtinNodeOverrides, rawNode) {
+   const nodeKey = node.getKey ? node.getKey() : key;
+   if (typeof node.decorate === "function") {
+     try {
+@@ -365,24 +377,25 @@
+           headingSlugs,
+           `${nodeKey}-${i}`,
+           void 0,
+-          builtinNodeOverrides
++          builtinNodeOverrides,
++          rawNode?.children?.[i]
+         )
+       );
+     }
+   }
+-  const textContent = node.getTextContent ? node.getTextContent() : void 0;
++  const headingSlug = headingSlugs.get(rawNode);
+   const override = builtinNodeOverrides?.[serialized.type];
+   if (override) {
+-    const defaultRenderer = () => renderBuiltinNode(serialized, nodeKey, children, headingSlugs, textContent);
++    const defaultRenderer = () => renderBuiltinNode(serialized, nodeKey, children, headingSlug);
+     return applyBlockId(override(serialized, nodeKey, children, defaultRenderer), blockId, nodeKey);
+   }
+   return applyBlockId(
+-    renderBuiltinNode(serialized, nodeKey, children, headingSlugs, textContent),
++    renderBuiltinNode(serialized, nodeKey, children, headingSlug),
+     blockId,
+     nodeKey
+   );
+ }
+-function renderEditorToReact(value, nodes, builtinNodeOverrides) {
++function renderEditorToReact(value, nodes, builtinNodeOverrides, parentHeadingSlugs) {
+   const editor = createHeadlessEditor({
+     nodes,
+     theme: editorTheme,
+@@ -394,12 +407,12 @@
+   const editorConfig = { namespace: "ssr", theme: editorTheme };
+   const editorState = editor.parseEditorState(value);
+   editor.setEditorState(editorState);
++  const headingSlugs = parentHeadingSlugs ?? collectHeadingSlugs(editor, editorState, value);
+   const footnoteData = preprocessFootnotes(value);
+   const rawRootChildren = value.root?.children;
+   let content = null;
+   editorState.read(() => {
+     const root = $getRoot();
+-    const headingSlugs = /* @__PURE__ */ new Map();
+     const children = root.getChildren().map(
+       (child, i) => renderTree(
+         child,
+@@ -408,7 +421,8 @@
+         headingSlugs,
+         `ssr-${i}`,
+         rawRootChildren?.[i]?.$?.blockId,
+-        builtinNodeOverrides
++        builtinNodeOverrides,
++        rawRootChildren?.[i]
+       )
+     );
+     content = /* @__PURE__ */ jsx(Fragment, { children });
+@@ -432,7 +446,6 @@
+     const nestedRawChildren = state.root?.children;
+     nestedState.read(() => {
+       const root = $getRoot();
+-      const headingSlugs = /* @__PURE__ */ new Map();
+       const ch = root.getChildren().map(
+         (child, i) => renderTree(
+           child,
+@@ -441,14 +454,15 @@
+           headingSlugs,
+           `nested-${i}`,
+           nestedRawChildren?.[i]?.$?.blockId,
+-          builtinNodeOverrides
++          builtinNodeOverrides,
++          nestedRawChildren?.[i]
+         )
+       );
+       nested = /* @__PURE__ */ jsx(Fragment, { children: ch });
+     });
+     return nested;
+   };
+-  return { content, footnoteData, renderNestedContent };
++  return { content, footnoteData, renderNestedContent, headingSlugs };
+ }
+ function RichRenderer({
+   value,
+@@ -464,10 +478,11 @@
+ }) {
+   const variantClass = getVariantClass(variant);
+   const outerRenderNestedContent = useOptionalNestedContentRenderer();
+-  const { content, footnoteData, renderNestedContent } = useMemo(() => {
++  const parentHeadingSlugs = useContext(HeadingSlugsContext);
++  const { content, footnoteData, renderNestedContent, headingSlugs } = useMemo(() => {
+     const nodes = extraNodes ? [...allNodes, ...extraNodes] : allNodes;
+-    return renderEditorToReact(value, nodes, builtinNodeOverrides);
+-  }, [builtinNodeOverrides, extraNodes, value]);
++    return renderEditorToReact(value, nodes, builtinNodeOverrides, parentHeadingSlugs);
++  }, [builtinNodeOverrides, extraNodes, value, parentHeadingSlugs]);
+   const classes = ["rich-content", variantClass, className].filter(Boolean).join(" ");
+   return /* @__PURE__ */ jsx(PortalThemeProvider, { className: variantClass, theme, children: /* @__PURE__ */ jsx(ColorSchemeProvider, { colorScheme: theme, children: /* @__PURE__ */ jsx(RendererConfigProvider, { config: rendererConfig, mode: "renderer", variant, children: /* @__PURE__ */ jsx(
+     FootnoteDefinitionsProvider,
+@@ -482,7 +497,7 @@
+           "data-rich-nested": nested ? "true" : void 0,
+           "data-theme": theme,
+           style,
+-          children: content
++          children: jsx(HeadingSlugsContext.Provider, { value: headingSlugs, children: content })
+         }
+       ) })
+     }

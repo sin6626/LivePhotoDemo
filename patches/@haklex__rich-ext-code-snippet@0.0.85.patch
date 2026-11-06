@@ -1,0 +1,58 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 907d9cb97d01955848b566bbec6578d2c7f8c5a5..188f1cbeed72182f60aaa6e492eec73cbcf107cc 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1,3 +1,4 @@
++import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+ var __defProp = Object.defineProperty;
+ var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+@@ -8,7 +9,7 @@ import { useColorScheme } from "@haklex/rich-editor";
+ import { presentDialog } from "@haklex/rich-editor-ui";
+ import { usePortalTheme } from "@haklex/rich-style-token";
+ import { X, Plus, GripVertical, Trash2, Pencil, FileCode } from "lucide-react";
+-import { useState, useRef, useEffect, useCallback, useMemo, useContext, createContext, createElement } from "react";
++import { useState, useRef, useEffect, useCallback, useMemo, createElement } from "react";
+ import { history, defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands";
+ import { Compartment, EditorState } from "@codemirror/state";
+ import { EditorView, keymap, lineNumbers } from "@codemirror/view";
+@@ -174,7 +175,9 @@ const CodeEditorModal = ({
+     dismiss();
+   }, [editFiles, onFilesChange, dismiss]);
+   const handleAddFile = useCallback(() => {
+-    const name = `untitled-${editFiles.length + 1}.ts`;
++    let index = editFiles.length + 1;
++    while (editFiles.some((file) => file.filename === `untitled-${index}.ts`)) index++;
++    const name = `untitled-${index}.ts`;
+     const newFile = {
+       filename: name,
+       code: "",
+@@ -182,7 +185,7 @@ const CodeEditorModal = ({
+     };
+     setEditFiles((prev) => [...prev, newFile]);
+     setActiveFilename(name);
+-  }, [editFiles.length]);
++  }, [editFiles]);
+   const handleDeleteFile = useCallback(
+     (filename) => {
+       if (editFiles.length <= 1) return;
+@@ -393,18 +396,8 @@ const CodeSnippetEditRenderer = ({
+     )
+   ] });
+ };
+-const r = createContext(null);
+-function o() {
+-  const n = useContext(r);
+-  return null == n && (function(n2, ...e) {
+-    const r2 = new URL("https://lexical.dev/docs/error"), t = new URLSearchParams();
+-    t.append("code", n2);
+-    for (const n3 of e) t.append("v", n3);
+-    throw r2.search = t.toString(), Error(`Minified Lexical error #${n2}; visit ${r2.toString()} for the full message or use the non-minified dev environment for full errors and additional helpful warnings.`);
+-  })(8), n;
+-}
+ const CodeSnippetEditDecorator = ({ nodeKey, files }) => {
+-  const [editor] = o();
++  const [editor] = useLexicalComposerContext();
+   const onFilesChange = useCallback(
+     (newFiles) => {
+       editor.update(() => {

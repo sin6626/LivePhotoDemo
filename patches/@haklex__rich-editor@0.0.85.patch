@@ -1,0 +1,725 @@
+diff --git a/dist/AlertQuoteEditNode-CB8C24Xf.js b/dist/AlertQuoteEditNode-CB8C24Xf.js
+index a190a5b5bedd61591fba71d203220c26c271634b..558338d14c51e44e9fa914b1d19b2d0a0b8edea4 100644
+--- a/dist/AlertQuoteEditNode-CB8C24Xf.js
++++ b/dist/AlertQuoteEditNode-CB8C24Xf.js
+@@ -1,3 +1,6 @@
++import { $restoreBlockIds } from "./block-identity.mjs";
++import { NestedContentPlugin } from "./nested-content.mjs";
++import { getResolvedEditNodes } from "./resolved-edit-nodes.mjs";
+ var __defProp = Object.defineProperty;
+ var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+@@ -158,6 +161,7 @@ function AlertEditDecorator({ nodeKey, alertType, contentEditor }) {
+           )
+         }
+       ),
++      /* @__PURE__ */ jsx(NestedContentPlugin, { nodeKey, parentEditor: editor }),
+       /* @__PURE__ */ jsx(ListPlugin, {}),
+       /* @__PURE__ */ jsx(LinkPlugin, {}),
+       /* @__PURE__ */ jsx(ExitBlockPlugin, { nodeKey, parentEditor: editor })
+@@ -185,7 +189,7 @@ const NESTED_EDITOR_NODES = [
+ function createContentEditor() {
+   return createEditor({
+     namespace: "AlertContent",
+-    nodes: NESTED_EDITOR_NODES,
++    nodes: getResolvedEditNodes(),
+     theme: editorTheme,
+     onError: (error) => {
+       console.error("[AlertContent]", error);
+@@ -193,22 +197,24 @@ function createContentEditor() {
+   });
+ }
+ const _AlertQuoteEditNode = class _AlertQuoteEditNode extends AlertQuoteNode {
+-  constructor(alertType, contentState, key) {
++  constructor(alertType, contentState, key, contentEditor) {
+     super(alertType, contentState, key);
+     __publicField(this, "__contentEditor");
+-    this.__contentEditor = createContentEditor();
+-    if (contentState) {
+-      const editorState = this.__contentEditor.parseEditorState(contentState);
++    this.__contentEditor = contentEditor ?? createContentEditor();
++    if (!contentEditor) {
++      const initialState = this.__contentState;
++      const editorState = this.__contentEditor.parseEditorState(initialState, () => $restoreBlockIds(initialState));
+       this.__contentEditor.setEditorState(editorState);
+     }
++    if (!contentEditor) this.__contentState = this.__contentEditor.getEditorState().toJSON();
+   }
+   static clone(node) {
+     const cloned = new _AlertQuoteEditNode(
+       node.__alertType,
+       node.__contentState,
+-      node.__key
++      node.__key,
++      node.__contentEditor
+     );
+-    cloned.__contentEditor = node.__contentEditor;
+     return cloned;
+   }
+   getContentEditor() {
+@@ -226,7 +232,7 @@ const _AlertQuoteEditNode = class _AlertQuoteEditNode extends AlertQuoteNode {
+       ...super.exportJSON(),
+       type: "alert-quote",
+       alertType: this.__alertType,
+-      content: this.__contentEditor.getEditorState().toJSON(),
++      content: this.__contentState,
+       version: 1
+     };
+   }
+diff --git a/dist/SubmitShortcutPlugin-CkuM_8Wk.js b/dist/SubmitShortcutPlugin-CkuM_8Wk.js
+index 33c724b5d48a350a2164d15685f8565041ab4fb3..4655dae136e8760213ff256068e8339e35a9e7fc 100644
+--- a/dist/SubmitShortcutPlugin-CkuM_8Wk.js
++++ b/dist/SubmitShortcutPlugin-CkuM_8Wk.js
+@@ -1,3 +1,4 @@
++import { $exitQuoteAtBoundary } from "./quote-transforms.mjs";
+ import { jsx, jsxs, Fragment } from "react/jsx-runtime";
+ import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
+ import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
+@@ -107,6 +108,18 @@ function exitInlineCodeAtLineEnd(selection) {
+ function BlockExitPlugin() {
+   const [editor] = useLexicalComposerContext();
+   useEffect(() => {
++    const unregisterQuoteEnter = editor.registerCommand(KEY_ENTER_COMMAND, (event) => {
++      if (editor.isComposing() || event?.shiftKey || event?.metaKey || event?.ctrlKey || event?.altKey) return false;
++      if (!$exitQuoteAtBoundary("end")) return false;
++      event?.preventDefault();
++      return true;
++    }, COMMAND_PRIORITY_CRITICAL);
++    const unregisterQuoteBackspace = editor.registerCommand(KEY_BACKSPACE_COMMAND, (event) => {
++      if (editor.isComposing() || event?.metaKey || event?.ctrlKey || event?.altKey) return false;
++      if (!$exitQuoteAtBoundary("start")) return false;
++      event?.preventDefault();
++      return true;
++    }, COMMAND_PRIORITY_CRITICAL);
+     const unregisterArrowRight = editor.registerCommand(
+       KEY_ARROW_RIGHT_COMMAND,
+       (event) => {
+@@ -303,6 +316,8 @@ function BlockExitPlugin() {
+       COMMAND_PRIORITY_CRITICAL
+     );
+     return () => {
++      unregisterQuoteEnter();
++      unregisterQuoteBackspace();
+       unregisterArrowRight();
+       unregisterArrowDown();
+       unregisterCmdEnter();
+@@ -606,10 +621,7 @@ const QUOTE_TRANSFORMER = {
+     if (isImport) {
+       const previousNode = parentNode.getPreviousSibling();
+       if ($isQuoteNode(previousNode)) {
+-        previousNode.splice(previousNode.getChildrenSize(), 0, [
+-          $createLineBreakNode(),
+-          ...children
+-        ]);
++        previousNode.append($createParagraphNode().append(...children));
+         parentNode.remove();
+         return;
+       }
+diff --git a/dist/block-identity.mjs b/dist/block-identity.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..a82056803b10eab50b727da1cb03a0572a40cf8a
+--- /dev/null
++++ b/dist/block-identity.mjs
+@@ -0,0 +1,32 @@
++import { $getRoot, $isElementNode, HISTORIC_TAG, SKIP_DOM_SELECTION_TAG, isLexicalEditor } from 'lexical';
++
++// Haklex decorators drop NodeState on import, before BlockIdPlugin assigns IDs.
++export function $restoreBlockIds(value) {
++  const restore = (node, source) => {
++    if (source?.type !== node.getType()) return;
++    const blockId = source.$?.blockId;
++    const current = node.exportJSON();
++    if (typeof blockId === 'string' && blockId && !current.$?.blockId) {
++      node.updateFromJSON({ ...current, $: { ...current.$, blockId } });
++    }
++    if ($isElementNode(node) && Array.isArray(source.children)) {
++      node.getChildren().forEach((child, index) => restore(child, source.children[index]));
++    }
++    if (source.content && typeof node.getContentEditor === 'function') {
++      const child = node.getContentEditor();
++      if (isLexicalEditor(child)) restoreBlockIds(child, source.content);
++    }
++    if (source.cells && typeof node.getCellEditors === 'function') {
++      node.getCellEditors().forEach((child, i) => restoreBlockIds(child, source.cells[i]));
++    }
++  };
++  $getRoot().getChildren().forEach((node, index) => restore(node, value.root.children[index]));
++}
++
++export function restoreBlockIds(editor, value) {
++  if (!value) return;
++  editor.update(() => $restoreBlockIds(value), {
++    discrete: editor.getRootElement() === null ? true : undefined,
++    tag: [HISTORIC_TAG, SKIP_DOM_SELECTION_TAG],
++  });
++}
+diff --git a/dist/commands-entry.d.ts b/dist/commands-entry.d.ts
+index eeaf45c8c267dc4ea98da19d4bf1ad4b4fb420f1..09fc1c3df0c41655bbd80528abe7c06ab71851c7 100644
+--- a/dist/commands-entry.d.ts
++++ b/dist/commands-entry.d.ts
+@@ -7,3 +7,5 @@ export type { CommandItemConfig, CommandPlacement, SlashMenuItemConfig, ToolbarG
+ export { collectCommandItems } from './utils/collect-command-items';
+ export { extractTextContent } from './utils/extractTextContent';
+ //# sourceMappingURL=commands-entry.d.ts.map
++import type { BaseSelection } from "lexical";
++export declare function $setRichBlocksType(selection: BaseSelection | null, type: "paragraph" | "quote" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"): void;
+diff --git a/dist/commands-entry.mjs b/dist/commands-entry.mjs
+index 029075785b0a3ea92ff3d9170df7ee1698583437..bf4b9f141081c0b04556f0d83b0fddcb1ef34a78 100644
+--- a/dist/commands-entry.mjs
++++ b/dist/commands-entry.mjs
+@@ -23,3 +23,5 @@ export {
+   collectCommandItems,
+   o as extractTextContent
+ };
++
++export { $setRichBlocksType } from "./quote-transforms.mjs";
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 83c629a042fad2caa73f2672a1ec6343da57d1f6..d86d13cb5594ae79f333378ae673afd7fe78101b 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -6,7 +6,7 @@ import { I as ImagePlugin, K as KaTeXPlugin, A as AlertPlugin, M as MermaidPlugi
+ import { PortalThemeProvider } from "@haklex/rich-style-token";
+ import { LexicalComposer } from "@lexical/react/LexicalComposer";
+ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
+-import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
++import { EditorHistoryProvider, SharedHistoryPlugin } from "./nested-content.mjs";
+ import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
+ import { n as ColorSchemeProvider } from "./config-BulxE6hd.js";
+ import { u as u2 } from "./config-BulxE6hd.js";
+@@ -79,7 +79,7 @@ function RichEditorShell({
+     ...initialValue ? { editorState: JSON.stringify(initialValue) } : {}
+   };
+   const variantClass = getVariantClass(variant);
+-  return /* @__PURE__ */ jsx(PortalThemeProvider, { className: variantClass, theme, children: /* @__PURE__ */ jsx(ColorSchemeProvider, { colorScheme: theme, children: /* @__PURE__ */ jsx(RendererConfigProvider, { config: rendererConfig, mode: "editor", variant, children: /* @__PURE__ */ jsx(LexicalComposer, { initialConfig, children: /* @__PURE__ */ jsx(FootnotePlugin, { children: /* @__PURE__ */ jsxs(
++  return /* @__PURE__ */ jsx(EditorHistoryProvider, { children: jsx(PortalThemeProvider, { className: variantClass, theme, children: /* @__PURE__ */ jsx(ColorSchemeProvider, { colorScheme: theme, children: /* @__PURE__ */ jsx(RendererConfigProvider, { config: rendererConfig, mode: "editor", variant, children: /* @__PURE__ */ jsx(LexicalComposer, { initialConfig, children: /* @__PURE__ */ jsx(FootnotePlugin, { children: /* @__PURE__ */ jsxs(
+     "div",
+     {
+       suppressHydrationWarning: true,
+@@ -102,7 +102,7 @@ function RichEditorShell({
+             )
+           }
+         ),
+-        /* @__PURE__ */ jsx(HistoryPlugin, {}),
++        /* @__PURE__ */ jsx(SharedHistoryPlugin, { root: true }),
+         /* @__PURE__ */ jsx(OnChangePlugin, { debounceMs, onChange }),
+         /* @__PURE__ */ jsx(SubmitShortcutPlugin, { onSubmit }),
+         /* @__PURE__ */ jsx(EditorRefPlugin, { onEditorReady }),
+@@ -111,7 +111,7 @@ function RichEditorShell({
+         actions && /* @__PURE__ */ jsx("div", { className: "rich-editor__actions", children: actions })
+       ]
+     }
+-  ) }) }) }) }) });
++  ) }) }) }) }) }) });
+ }
+ function RichEditor({ extraNodes, imageUpload, children, ...shellProps }) {
+   const nodes = extraNodes ? [...allEditNodes, ...extraNodes] : allEditNodes;
+diff --git a/dist/nested-content.mjs b/dist/nested-content.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..92bc343540d91dc622910939afa4b5ad7819f961
+--- /dev/null
++++ b/dist/nested-content.mjs
+@@ -0,0 +1,121 @@
++import { createContext, createElement, useContext, useEffect, useLayoutEffect, useState } from 'react';
++import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
++import { createEmptyHistoryState, HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
++import { $getNodeByKey, COMMAND_PRIORITY_HIGH, HISTORIC_TAG, REDO_COMMAND, SKIP_DOM_SELECTION_TAG, UNDO_COMMAND } from 'lexical';
++import { $restoreBlockIds } from './block-identity.mjs';
++
++const HistoryContext = createContext(undefined);
++export function EditorHistoryProvider({ children }) {
++  const [history] = useState(createEmptyHistoryState);
++  return createElement(HistoryContext.Provider, { value: history }, children);
++}
++const parentEditors = new WeakMap();
++// Native history shallow-copies entries when pushing them onto a stack.
++const SNAPSHOT = Symbol('nested-history');
++function captureHistoryEntry(entry, history) {
++  if (!entry || history.replaying) return;
++  const chain = [];
++  for (let editor = entry.editor; editor; editor = parentEditors.get(editor)) {
++    chain.unshift({ editor, editorState: editor === entry.editor ? entry.editorState : editor.getEditorState() });
++  }
++  if (chain[0]?.editor === history.rootEditor) entry[SNAPSHOT] = chain;
++}
++export function registerHistoryBoundary(editor, history) {
++  history.rootEditor ??= editor;
++  return editor.registerUpdateListener(({ prevEditorState, dirtyElements, dirtyLeaves, tags }) => {
++    if (history.replaying) {
++      tags.add(HISTORIC_TAG);
++      return;
++    }
++    if (!tags.has(HISTORIC_TAG) && (dirtyElements.size || dirtyLeaves.size) && history.current?.editor !== editor) {
++      history.current = { editor, editorState: prevEditorState };
++      captureHistoryEntry(history.current, history);
++    }
++  });
++}
++export function registerHistorySnapshots(editor, history) {
++  const removeUpdate = editor.registerUpdateListener(({ editorState, tags }) => {
++    if (editor === history.rootEditor && history.pendingReplay && tags.has(HISTORIC_TAG)) {
++      const chain = history.pendingReplay;
++      history.pendingReplay = null;
++      queueMicrotask(() => {
++        try {
++          for (const entry of chain.slice(1)) entry.editor.setEditorState(entry.editorState, { tag: HISTORIC_TAG });
++        } finally {
++          history.replaying = false;
++        }
++      });
++    } else if (!tags.has(HISTORIC_TAG) && history.current?.editor === editor && history.current.editorState === editorState) {
++      captureHistoryEntry(history.current, history);
++    }
++  });
++  const removers = [removeUpdate];
++  if (editor === history.rootEditor) {
++    const promote = (entry) => entry?.[SNAPSHOT] ? { ...entry, ...entry[SNAPSHOT][0] } : entry;
++    for (const [command, stackKey] of [[UNDO_COMMAND, 'undoStack'], [REDO_COMMAND, 'redoStack']]) {
++      removers.push(editor.registerCommand(command, () => {
++        const stack = history[stackKey];
++        const target = stack.at(-1);
++        if (target?.[SNAPSHOT]) {
++          history.pendingReplay = target[SNAPSHOT];
++          history.replaying = true;
++          history.current = promote(history.current);
++          stack[stack.length - 1] = promote(target);
++        }
++        return false;
++      }, COMMAND_PRIORITY_HIGH));
++    }
++  }
++  return () => removers.forEach((remove) => remove());
++}
++export function SharedHistoryPlugin({ root = false }) {
++  const [editor] = useLexicalComposerContext();
++  const history = useContext(HistoryContext);
++  if (root && history) history.rootEditor = editor;
++  useLayoutEffect(() => history && registerHistoryBoundary(editor, history), [editor, history]);
++  useEffect(() => history && registerHistorySnapshots(editor, history), [editor, history]);
++  return createElement(HistoryPlugin, { externalHistoryState: history });
++}
++
++export function registerNestedContent(editor, parentEditor, nodeKey, cellIndex, history) {
++  parentEditors.set(editor, parentEditor);
++  let content;
++  let restoring = false;
++  const restore = ({ editorState }) => {
++    const next = editorState.read(() => {
++      const node = $getNodeByKey(nodeKey);
++      return cellIndex === undefined ? node?.getContentState() : node?.getCellStates()[cellIndex];
++    });
++    if (!next || next === content) return;
++    content = next;
++    if (JSON.stringify(next) === JSON.stringify(editor.getEditorState().toJSON())) return;
++    restoring = true;
++    try {
++      editor.setEditorState(editor.parseEditorState(next, () => $restoreBlockIds(next)), { tag: HISTORIC_TAG });
++    } finally {
++      restoring = false;
++    }
++  };
++  restore({ editorState: parentEditor.getEditorState() });
++  const removeChild = editor.registerUpdateListener(({ editorState, dirtyElements, dirtyLeaves }) => {
++    if (restoring || history?.replaying || (!dirtyElements.size && !dirtyLeaves.size)) return;
++    const entry = history?.current;
++    content = editorState.toJSON();
++    parentEditor.update(() => {
++      const node = $getNodeByKey(nodeKey);
++      if (!node) return;
++      if (cellIndex === undefined) node.setContentState(content);
++      else node.setCellState(cellIndex, content);
++    }, { discrete: true, tag: [HISTORIC_TAG, SKIP_DOM_SELECTION_TAG] });
++    if (entry?.editor === editor && entry.editorState === editorState) captureHistoryEntry(entry, history);
++  });
++  const removeParent = parentEditor.registerUpdateListener(restore);
++  return () => { removeChild(); removeParent(); parentEditors.delete(editor); };
++}
++
++export function NestedContentPlugin({ parentEditor, nodeKey, cellIndex }) {
++  const [editor] = useLexicalComposerContext();
++  const history = useContext(HistoryContext);
++  useEffect(() => registerNestedContent(editor, parentEditor, nodeKey, cellIndex, history), [editor, parentEditor, nodeKey, cellIndex, history]);
++  return createElement(SharedHistoryPlugin);
++}
+diff --git a/dist/node-registry-eMijRh3N.js b/dist/node-registry-eMijRh3N.js
+index 7ee9ff2dc0beb24907b0f168058672e51aab5bfb..1604ba3ab8e0f4ede4f7489bd3e887fde274bf54 100644
+--- a/dist/node-registry-eMijRh3N.js
++++ b/dist/node-registry-eMijRh3N.js
+@@ -1,9 +1,12 @@
++import { getResolvedEditNodes, setResolvedEditNodes } from "./resolved-edit-nodes.mjs";
++import { $restoreBlockIds } from "./block-identity.mjs";
++import { NestedContentPlugin } from "./nested-content.mjs";
+ var __defProp = Object.defineProperty;
+ var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+ import { o as $isBannerNode, p as BannerRenderer, q as BannerNode, r as normalizeBannerType, s as $isCodeBlockNode, t as CodeBlockRenderer, v as CodeBlockNode, F as FootnoteSectionNode, g as $isGridContainerNode, G as GridContainerNode, l as builtinNodes, V as VideoNode, L as LinkCardNode, C as CommentNode, D as DetailsNode, R as RubyNode } from "./config-BulxE6hd.js";
+ import { N as NESTED_EDITOR_NODES, A as AlertQuoteEditNode } from "./AlertQuoteEditNode-CB8C24Xf.js";
+-import { $getNodeByKey, $insertNodes, createEditor, $getSelection, $isNodeSelection, $isElementNode, $isDecoratorNode, $createNodeSelection, $setSelection, $createParagraphNode, $nodesOfType, $getRoot } from "lexical";
++import { $isParagraphNode, $getNodeByKey, $insertNodes, createEditor, $getSelection, $isNodeSelection, $isElementNode, $isDecoratorNode, $createNodeSelection, $setSelection, $createParagraphNode, $nodesOfType, $getRoot } from "lexical";
+ import { Flag, LayoutGrid, Plus, Minus } from "lucide-react";
+ import { useCallback, createElement, useState, useEffect } from "react";
+ import { jsxs, jsx, Fragment } from "react/jsx-runtime";
+@@ -76,6 +79,7 @@ function BannerEditDecorator({
+           )
+         }
+       ),
++      /* @__PURE__ */ jsx(NestedContentPlugin, { nodeKey, parentEditor: editor }),
+       /* @__PURE__ */ jsx(ListPlugin, {}),
+       /* @__PURE__ */ jsx(LinkPlugin, {})
+     ] }) })
+@@ -84,7 +88,7 @@ function BannerEditDecorator({
+ function createContentEditor() {
+   return createEditor({
+     namespace: "BannerContent",
+-    nodes: NESTED_EDITOR_NODES,
++    nodes: getResolvedEditNodes(),
+     theme: editorTheme,
+     onError: (error) => {
+       console.error("[BannerContent]", error);
+@@ -92,22 +96,24 @@ function createContentEditor() {
+   });
+ }
+ const _BannerEditNode = class _BannerEditNode extends BannerNode {
+-  constructor(bannerType, contentState, key) {
++  constructor(bannerType, contentState, key, contentEditor) {
+     super(bannerType, contentState, key);
+     __publicField(this, "__contentEditor");
+-    this.__contentEditor = createContentEditor();
+-    if (contentState) {
+-      const editorState = this.__contentEditor.parseEditorState(contentState);
++    this.__contentEditor = contentEditor ?? createContentEditor();
++    if (!contentEditor) {
++      const initialState = this.__contentState;
++      const editorState = this.__contentEditor.parseEditorState(initialState, () => $restoreBlockIds(initialState));
+       this.__contentEditor.setEditorState(editorState);
+     }
++    if (!contentEditor) this.__contentState = this.__contentEditor.getEditorState().toJSON();
+   }
+   static clone(node) {
+     const cloned = new _BannerEditNode(
+       node.__bannerType,
+       node.__contentState,
+-      node.__key
++      node.__key,
++      node.__contentEditor
+     );
+-    cloned.__contentEditor = node.__contentEditor;
+     return cloned;
+   }
+   getContentEditor() {
+@@ -139,7 +145,7 @@ const _BannerEditNode = class _BannerEditNode extends BannerNode {
+       ...super.exportJSON(),
+       type: "banner",
+       bannerType: this.__bannerType,
+-      content: this.__contentEditor.getEditorState().toJSON(),
++      content: this.__contentState,
+       version: 1
+     };
+   }
+@@ -526,11 +532,6 @@ function GridEditDecorator({
+       const cols = node.getCols();
+       const editors = node.getCellEditors();
+       if (editors.length <= cols) return;
+-      const lastRow = editors.slice(-cols);
+-      const allEmpty = lastRow.every(
+-        (cellEditor) => cellEditor.getEditorState().read(() => $getRoot().getTextContentSize() === 0)
+-      );
+-      if (!allEmpty) return;
+       node.removeCells(cols);
+     });
+   }, [editor, nodeKey]);
+@@ -605,6 +606,7 @@ function GridEditDecorator({
+               )
+             }
+           ),
++          /* @__PURE__ */ jsx(NestedContentPlugin, { nodeKey, parentEditor: editor, cellIndex: i }),
+           /* @__PURE__ */ jsx(ListPlugin, {}),
+           /* @__PURE__ */ jsx(LinkPlugin, {})
+         ] }) }, i))
+@@ -615,7 +617,7 @@ function GridEditDecorator({
+ function createCellEditor() {
+   return createEditor({
+     namespace: "GridCell",
+-    nodes: NESTED_EDITOR_NODES,
++    nodes: getResolvedEditNodes(),
+     theme: editorTheme,
+     onError: (error) => {
+       console.error("[GridCell]", error);
+@@ -623,24 +625,27 @@ function createCellEditor() {
+   });
+ }
+ const _GridEditNode = class _GridEditNode extends GridContainerNode {
+-  constructor(cols = 2, gap, cellStates, key) {
++  constructor(cols = 2, gap, cellStates, key, cellEditors) {
+     super(cols, gap, cellStates, key);
+     __publicField(this, "__cellEditors");
+-    this.__cellEditors = this.__cellStates.map((state) => {
++    this.__cellEditors = cellEditors ?? this.__cellStates.map((state) => {
+       const editor = createCellEditor();
+-      const editorState = editor.parseEditorState(state);
++      const editorState = editor.parseEditorState(state, () => $restoreBlockIds(state));
+       editor.setEditorState(editorState);
+       return editor;
+     });
++    if (!cellEditors) this.__cellStates = this.__cellEditors.map((editor) => editor.getEditorState().toJSON());
+   }
+   static clone(node) {
+-    const cloned = new _GridEditNode(node.__cols, node.__gap, node.__cellStates, node.__key);
+-    cloned.__cellEditors = [...node.__cellEditors];
+-    return cloned;
++    return new _GridEditNode(node.__cols, node.__gap, [...node.__cellStates], node.__key, [...node.__cellEditors]);
+   }
+   getCellEditors() {
+     return this.getLatest().__cellEditors;
+   }
++  setCellState(index, state) {
++    const writable = this.getWritable();
++    writable.__cellStates[index] = state;
++  }
+   setCols(cols) {
+     const writable = this.getWritable();
+     const prev = writable.__cellEditors.length;
+@@ -704,20 +709,15 @@ const _GridEditNode = class _GridEditNode extends GridContainerNode {
+     }
+   }
+   removeCells(count) {
+-    const writable = this.getWritable();
+-    const editors = writable.__cellEditors;
+-    const states = writable.__cellStates;
++    const editors = this.getCellEditors();
+     const toRemove = Math.min(count, editors.length);
+-    for (let i = 0; i < toRemove; i++) {
+-      const editor = editors.at(-1);
+-      if (!editor) break;
+-      const isEmpty = editor.getEditorState().read(() => {
+-        return $getRoot().getTextContentSize() === 0;
+-      });
+-      if (!isEmpty) break;
+-      editors.pop();
+-      states.pop();
+-    }
++    if (toRemove <= 0 || !editors.slice(-toRemove).every((editor) =>
++      editor.getEditorState().read(() => $getRoot().getChildren().every((node) =>
++        $isParagraphNode(node) && node.isEmpty()))
++    )) return;
++    const writable = this.getWritable();
++    writable.__cellEditors.splice(-toRemove);
++    writable.__cellStates.splice(-toRemove);
+   }
+   static importJSON(serializedNode) {
+     const legacy = serializedNode;
+@@ -750,7 +750,7 @@ const _GridEditNode = class _GridEditNode extends GridContainerNode {
+       type: "grid-container",
+       cols: this.__cols,
+       gap: this.__gap,
+-      cells: this.__cellEditors.map((editor) => editor.getEditorState().toJSON()),
++      cells: this.__cellStates,
+       version: 1
+     };
+   }
+@@ -805,13 +805,7 @@ const customEditNodes = [
+   TagNode
+ ];
+ const allEditNodes = [...builtinNodes, ...customEditNodes];
+-let _resolvedEditNodes = null;
+-function setResolvedEditNodes(nodes) {
+-  _resolvedEditNodes = nodes;
+-}
+-function getResolvedEditNodes() {
+-  return _resolvedEditNodes ?? allEditNodes;
+-}
++setResolvedEditNodes(allEditNodes);
+ export {
+   $createBannerEditNode as $,
+   FootnoteSectionEditNode as F,
+diff --git a/dist/nodes/AlertQuoteEditNode.d.ts b/dist/nodes/AlertQuoteEditNode.d.ts
+index b40dfc0d2ad057e20b57033811461cd58b1d7b35..1481479155d4fc7a1a08254e2b63ee2dfbf33eca 100644
+--- a/dist/nodes/AlertQuoteEditNode.d.ts
++++ b/dist/nodes/AlertQuoteEditNode.d.ts
+@@ -6,7 +6,7 @@ export declare class AlertQuoteEditNode extends AlertQuoteNode {
+     __contentEditor: LexicalEditor;
+     static commandItems: CommandItemConfig[];
+     static clone(node: AlertQuoteEditNode): AlertQuoteEditNode;
+-    constructor(alertType: AlertType, contentState?: SerializedEditorState, key?: string);
++    constructor(alertType: AlertType, contentState?: SerializedEditorState, key?: string, contentEditor?: LexicalEditor);
+     getContentEditor(): LexicalEditor;
+     static importJSON(serializedNode: SerializedAlertQuoteNode): AlertQuoteEditNode;
+     exportJSON(): SerializedAlertQuoteNode;
+diff --git a/dist/nodes/BannerEditNode.d.ts b/dist/nodes/BannerEditNode.d.ts
+index f8b2854f75b3d577421a4cfaf599fe6a62758b98..2e670e5687ad8000b5cf74ef4b4507bd0b268490 100644
+--- a/dist/nodes/BannerEditNode.d.ts
++++ b/dist/nodes/BannerEditNode.d.ts
+@@ -6,7 +6,7 @@ export declare class BannerEditNode extends BannerNode {
+     __contentEditor: LexicalEditor;
+     static commandItems: CommandItemConfig[];
+     static clone(node: BannerEditNode): BannerEditNode;
+-    constructor(bannerType: BannerType, contentState?: SerializedEditorState, key?: string);
++    constructor(bannerType: BannerType, contentState?: SerializedEditorState, key?: string, contentEditor?: LexicalEditor);
+     getContentEditor(): LexicalEditor;
+     static importJSON(serializedNode: SerializedBannerNode): BannerEditNode;
+     exportJSON(): SerializedBannerNode;
+diff --git a/dist/nodes/GridEditNode.d.ts b/dist/nodes/GridEditNode.d.ts
+index 786dd3c7673752261e8226514609492f8c014304..bb27e99f714ed4002ba609ccbe0c80e17ae64d3e 100644
+--- a/dist/nodes/GridEditNode.d.ts
++++ b/dist/nodes/GridEditNode.d.ts
+@@ -6,8 +6,9 @@ export declare class GridEditNode extends GridContainerNode {
+     __cellEditors: LexicalEditor[];
+     static slashMenuItems: SlashMenuItemConfig[];
+     static clone(node: GridEditNode): GridEditNode;
+-    constructor(cols?: number, gap?: string, cellStates?: SerializedEditorState[], key?: string);
++    constructor(cols?: number, gap?: string, cellStates?: SerializedEditorState[], key?: string, cellEditors?: LexicalEditor[]);
+     getCellEditors(): LexicalEditor[];
++    setCellState(index: number, state: SerializedEditorState): void;
+     setCols(cols: number): void;
+     addCells(count: number): void;
+     removeCells(count: number): void;
+diff --git a/dist/plugins-entry.d.ts b/dist/plugins-entry.d.ts
+index 60d25644d3d77eae599119fdbedceeb6e2e3292c..e4c80ae240cc7c8361c74982df2b3cbc9c494257 100644
+--- a/dist/plugins-entry.d.ts
++++ b/dist/plugins-entry.d.ts
+@@ -20,3 +20,4 @@ export { OnChangePlugin } from './plugins/OnChangePlugin';
+ export { SubmitShortcutPlugin } from './plugins/SubmitShortcutPlugin';
+ export { ALL_TRANSFORMERS } from './transformers';
+ //# sourceMappingURL=plugins-entry.d.ts.map
++export declare function restoreBlockIds(editor: import("lexical").LexicalEditor, value?: import("lexical").SerializedEditorState): void;
+diff --git a/dist/plugins-entry.mjs b/dist/plugins-entry.mjs
+index a5e64a3be781c60bdcb1a15f0b45884ad65855f8..1fdaeb58826671081544b822d8dc618e364a24e4 100644
+--- a/dist/plugins-entry.mjs
++++ b/dist/plugins-entry.mjs
+@@ -25,3 +25,5 @@ export {
+   g as defaultImageUpload,
+   u as useImageUpload
+ };
++
++export { restoreBlockIds } from "./block-identity.mjs";
+diff --git a/dist/quote-transforms.mjs b/dist/quote-transforms.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..fdf021aea00d4d7771902f3b9149a60f33f38d97
+--- /dev/null
++++ b/dist/quote-transforms.mjs
+@@ -0,0 +1,113 @@
++import { $isListNode } from "@lexical/list";
++import { $addUpdateTag, $createParagraphNode, $getSelection, $getState, $isElementNode, $isDecoratorNode, $isParagraphNode, $isRangeSelection, $setState, HISTORY_PUSH_TAG } from "lexical";
++import { $createHeadingNode, $createQuoteNode, $isQuoteNode, $isHeadingNode } from "@lexical/rich-text";
++import { $copyBlockFormatIndent, $setBlocksType } from "@lexical/selection";
++import { f as blockIdState } from "./SubmitShortcutPlugin-CkuM_8Wk.js";
++
++function $quoteAncestor(node) {
++  return $isQuoteNode(node) ? node : node.getParents().find($isQuoteNode);
++}
++function $moveOutOfQuote(block) {
++  const quote = block.getParent();
++  if (!$isQuoteNode(quote)) return;
++  const following = block.getNextSiblings();
++  if (block.getPreviousSibling() === null) {
++    quote.insertBefore(block);
++  } else {
++    if (following.length) {
++      const tail = $createQuoteNode();
++      $copyBlockFormatIndent(quote, tail);
++      tail.setDirection(quote.getDirection());
++      quote.insertAfter(tail);
++      tail.append(...following);
++    }
++    quote.insertAfter(block);
++  }
++  if (quote.isEmpty()) quote.remove();
++}
++export function $setRichBlocksType(selection, type) {
++  if (!$isRangeSelection(selection)) return;
++  const quoting = type === "quote";
++  if (quoting && selection.getNodes().every((node) => $quoteAncestor(node))) return;
++  const numbers = new Map();
++  for (const node of selection.getNodes()) {
++    for (const ancestor of [node, ...node.getParents()]) {
++      if ($isListNode(ancestor) && ancestor.getListType() === "number") {
++        for (const item of ancestor.getChildren()) numbers.set(item, item.getValue());
++      }
++    }
++  }
++  const blocks = [];
++  $setBlocksType(selection,
++    () => quoting || type === "paragraph" ? $createParagraphNode() : $createHeadingNode(type),
++    (previous, next) => {
++      $copyBlockFormatIndent(previous, next);
++      next.setDirection(previous.getDirection());
++      const blockId = $getState(previous, blockIdState);
++      if (blockId) $setState(next, blockIdState, blockId);
++      blocks.push(next);
++    },
++  );
++  for (const [item, value] of numbers) {
++    const parent = item.getParent();
++    if (item.isAttached() && $isListNode(parent) && parent.getFirstChild()?.getKey() === item.getKey()) parent.setStart(value);
++  }
++  const created = new Set();
++  blocks.sort((left, right) => left.isBefore(right) ? -1 : 1);
++  for (const block of blocks) {
++    if (!block.isAttached()) continue;
++    const parts = [block];
++    let cursor = block;
++    let inline = block;
++    for (const child of block.getChildren()) {
++      if (($isElementNode(child) || $isDecoratorNode(child)) && !child.isInline()) {
++        cursor.insertAfter(child);
++        cursor = child;
++        parts.push(child);
++        inline = null;
++      } else if (inline === null) {
++        inline = $isHeadingNode(block) ? $createHeadingNode(block.getTag()) : $createParagraphNode();
++        $copyBlockFormatIndent(block, inline);
++        inline.setDirection(block.getDirection());
++        cursor.insertAfter(inline);
++        cursor = inline;
++        parts.push(inline);
++        inline.append(child);
++      } else if (inline !== block) {
++        inline.append(child);
++      }
++    }
++    if (!quoting) {
++      for (const part of parts) $moveOutOfQuote(part);
++      continue;
++    }
++    if ($quoteAncestor(block)) continue;
++    const previous = block.getPreviousSibling();
++    const quote = created.has(previous) ? previous : $createQuoteNode();
++    if (!created.has(quote)) {
++      block.insertBefore(quote);
++      created.add(quote);
++    }
++    quote.append(...parts);
++  }
++  if (blocks.length) $addUpdateTag(HISTORY_PUSH_TAG);
++}
++export function $exitQuoteAtBoundary(edge) {
++  const selection = $getSelection();
++  if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
++  const anchor = selection.anchor.getNode();
++  const paragraph = $isParagraphNode(anchor) ? anchor : anchor.getParents().find($isParagraphNode);
++  if (!paragraph || !$isQuoteNode(paragraph.getParent())) return false;
++  if (edge === "end") {
++    if (!paragraph.isEmpty() || paragraph.getNextSibling()) return false;
++  } else {
++    if (selection.anchor.offset !== 0 || paragraph.getPreviousSibling()) return false;
++    for (let node = anchor; node !== paragraph; node = node.getParent()) {
++      if (!node || node.getPreviousSibling()) return false;
++    }
++  }
++  $moveOutOfQuote(paragraph);
++  paragraph.selectStart();
++  $addUpdateTag(HISTORY_PUSH_TAG);
++  return true;
++}
+diff --git a/dist/resolved-edit-nodes.mjs b/dist/resolved-edit-nodes.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..abd6b8e2565c67f866e63d165ce103e63924ef58
+--- /dev/null
++++ b/dist/resolved-edit-nodes.mjs
+@@ -0,0 +1,7 @@
++let resolvedEditNodes = [];
++export function setResolvedEditNodes(nodes) {
++  resolvedEditNodes = nodes;
++}
++export function getResolvedEditNodes() {
++  return resolvedEditNodes;
++}

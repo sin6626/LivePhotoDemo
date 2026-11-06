@@ -1,0 +1,39 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 74379bd1cb3cff7747220015b630d17c13d1dd2b..f64082bf80597badbd6f00c8b2398d5433e2b6e3 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1,6 +1,6 @@
+ import { jsx, jsxs, Fragment } from "react/jsx-runtime";
+ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+-import { $isTableCellNode, $getTableNodeFromLexicalNodeOrThrow, $insertTableRowAtSelection, $deleteTableRow__EXPERIMENTAL, $deleteTableColumn__EXPERIMENTAL, $getTableCellNodeFromLexicalNode } from "@lexical/table";
++import { $isTableCellNode, $getTableNodeFromLexicalNodeOrThrow, $insertTableRowAtSelection, $insertTableColumnAtSelection, $deleteTableRow__EXPERIMENTAL, $deleteTableColumn__EXPERIMENTAL, $getTableCellNodeFromLexicalNode } from "@lexical/table";
+ import { $getNearestNodeFromDOMNode, $createRangeSelection, $setSelection } from "lexical";
+ import { useState, useRef, useCallback, useEffect } from "react";
+ import { createPortal } from "react-dom";
+@@ -425,7 +425,7 @@ function TableRowColumnHandlesInner({
+     if (!table) return;
+     selectCellAtIndex(table, 0, colHandle.colIndex, editor);
+     editor.update(() => {
+-      $insertTableRowAtSelection(false);
++      $insertTableColumnAtSelection(false);
+     });
+   }, [editor, colHandle.colIndex]);
+   const insertColumnRight = useCallback(() => {
+@@ -433,7 +433,7 @@ function TableRowColumnHandlesInner({
+     if (!table) return;
+     selectCellAtIndex(table, 0, colHandle.colIndex, editor);
+     editor.update(() => {
+-      $insertTableRowAtSelection(true);
++      $insertTableColumnAtSelection(true);
+     });
+   }, [editor, colHandle.colIndex]);
+   const deleteColumn = useCallback(() => {
+@@ -457,7 +457,7 @@ function TableRowColumnHandlesInner({
+     if (!table) return;
+     selectCellAtIndex(table, 0, colHandle.colIndex, editor);
+     editor.update(() => {
+-      $insertTableRowAtSelection(false);
++      $insertTableColumnAtSelection(false);
+     });
+   }, [editor, colHandle.colIndex]);
+   return /* @__PURE__ */ jsxs(Fragment, { children: [
