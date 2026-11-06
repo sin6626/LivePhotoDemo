@@ -12,6 +12,7 @@ import { readEditorImage } from '../lib/media';
 import '@haklex/rich-kit-shiro/style.css';
 import '@haklex/rich-plugin-toolbar/style.css';
 import '@haklex/rich-ext-nested-doc/style.css';
+import './image-layout.css';
 
 const extraNodes = [...nestedDocEditNodes, LivePhotoNode];
 function EditorToolbar() {

@@ -32,6 +32,8 @@ npm run dev
 
 此版本原图片没有拖拽缩放手柄，本次没有给实况图另加一套缩放；两者沿用同样的尺寸规则。博客后端保存、发布页渲染和跨页面持久化仍是后续接入范围。
 
+编辑区图片最大宽度为正文宽度，最大高度为 `min(70vh, 400px)`，等比缩小且不放大小图。普通图和实况图共用 `app/editor/image-layout.css`，仅调整显示，不修改原图尺寸或导出文件。400px 来自博客 Markdown 所见即所得编辑器的块图规则；Haklex 本身没有限高，博客阅读页另有 `min(70vh, 42rem)`，这三层不同。
+
 输出为 Google 风格 Motion Photo，**不是苹果 Live Photo，不保证所有相册识别**。格式依据：[Google Motion Photo format](https://developer.android.com/media/platform/motion-photo-format)。本 Demo 只解析自己生成的布局。
 
 ## 验证与启动

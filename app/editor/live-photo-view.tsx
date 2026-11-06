@@ -132,7 +132,7 @@ export default function LivePhotoView({ data, nodeKey }: { data: LivePhotoData; 
   </ImageEditExtensionsProvider>;
 }
 const s = stylex.create({
-  video: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0, pointerEvents: 'none', backgroundColor: '#f5f5f5' },
+  video: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', opacity: 0, pointerEvents: 'none', backgroundColor: '#f5f5f5' },
   visible: { opacity: 1 },
   badge: { position: 'absolute', top: 10, left: 10, display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '3px 6px', borderRadius: 4, borderWidth: 0, color: '#fff', backgroundColor: '#20202099', lineHeight: 1.5, cursor: 'pointer' },
   error: { fontSize: 12, lineHeight: 1.7, color: '#b42318', marginTop: 8 },

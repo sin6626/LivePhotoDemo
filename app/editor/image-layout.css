@@ -1,0 +1,22 @@
+/* 原图片与实况图共用：覆盖 Haklex 的行内占位宽度，加载后按图片实际比例限高。 */
+.rich-editor .rich-image-wrapper {
+  --editor-image-max-height: min(70vh, 400px);
+}
+
+.rich-editor .rich-image-wrapper .rr-image-frame {
+  max-width: 100%;
+  max-height: var(--editor-image-max-height);
+}
+
+.rich-editor .rich-image-wrapper .rr-image-frame.rr-image-loaded {
+  width: fit-content !important;
+  aspect-ratio: auto !important;
+}
+
+.rich-editor .rich-image-wrapper .rr-image-loaded > .rr-image-img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: var(--editor-image-max-height);
+  object-fit: contain;
+}
