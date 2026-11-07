@@ -1,5 +1,5 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
-index b1c70c6e3455ab177f0cdb217e643bfab22507ec..151f59aafe40d2b5bd86a7e86aacacb978ad56bf 100644
+index b1c70c6..9f73ad4 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -1,3 +1,4 @@
@@ -37,3 +37,35 @@ index b1c70c6e3455ab177f0cdb217e643bfab22507ec..151f59aafe40d2b5bd86a7e86aacacb9
        });
      },
      [editor, handle.nodeKey]
+@@ -338,8 +330,29 @@ function BlockHandleInner({ editor }) {
+       const block = activeBlockRef.current;
+       if (!block) return;
+       clearDragVisualState();
+-      const rect = block.getBoundingClientRect();
+-      const preview = block.cloneNode(true);
++      const frame = block.matches(".rich-image-wrapper") ? block.querySelector(".rr-image-frame") : null;
++      const cover = frame?.classList.contains("rr-image-loaded") ? frame.querySelector("img.rr-image-img") : null;
++      const visual = cover?.complete && cover.naturalWidth ? cover : frame ?? block;
++      const rect = visual.getBoundingClientRect();
++      let preview;
++      if (visual === cover && rect.width > 0 && rect.height > 0) {
++        const canvas = document.createElement("canvas");
++        canvas.width = Math.max(1, Math.round(rect.width));
++        canvas.height = Math.max(1, Math.round(rect.height));
++        const ctx = canvas.getContext("2d");
++        if (ctx) {
++          ctx.drawImage(cover, 0, 0, canvas.width, canvas.height);
++          preview = canvas;
++        }
++      }
++      preview ??= (frame ?? block).cloneNode(true);
++      if (frame) {
++        Object.assign(preview.style, {
++          height: `${rect.height}px`,
++          border: "0", background: "transparent", boxShadow: "none",
++          borderRadius: getComputedStyle(frame).borderRadius
++        });
++      }
+       preview.classList.add(dragPreview);
+       preview.style.width = `${rect.width}px`;
+       if (portalClassName) {

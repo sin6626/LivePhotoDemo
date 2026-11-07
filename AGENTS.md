@@ -72,3 +72,8 @@
 - `.local-media/<原文件哈希>/original/<文件名>` 与兼容副本为用户要求保留的私有归档，不删除、不提交、不允许通过 Vite 静态读取。临时作业只清理自己创建的两个明确文件及空目录。正文仍是浏览器会话状态。
 - 验证：`npm test`、`npm run typecheck`；有格式夹具和已启动服务时运行 `node tests/normalize-api.mjs`、`tests/mac-formats.browser.mjs` 与 `tests/auto-normalize.browser.mjs`（Ego Browser，支持 ?space=ID，后者 ?preview=1 验证 4173）。
 - 已验证 dev 与独立 4173 生产预览：普通 HEIC、HEIC + HEVC MOV 插入、播放、导出、HEIC 替换封面及 MOV 替换视频；导出视频与兼容副本逐字节一致，源文件/归档一致。无残留临时作业。6 项 Node 测试、类型检查、2 GB 构建通过。
+
+## 块手柄拖影（2026-11-07）
+- 普通图片与实况图共用 Haklex block-handle。拖影使用正文中已加载封面的显示尺寸和已解码像素，不把整行、操作栏或视频克隆到拖影。加载/失败状态回退到图片框；非图片块沿用原预览。
+- 修复前真实拖动：两类竖图都是 180×400，传给 setDragImage 的却是 668×850。回归脚本 tests/image-drag-preview.browser.mjs 检查尺寸、像素、拖后排序和清理。补丁后已做 32 MB Node 堆的处理器调用检查；本轮内存告警期间未完成修复后的整页浏览器回归。
+- 用户提示内存紧张时，先看全机压力、交换区和进程归属；不要启动构建、强制依赖预打包或另起完整浏览器。其他项目的服务交由用户管理。
