@@ -10,7 +10,16 @@ async function verify(page) {
   await page.cdp('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1600, deviceScaleFactor: 1, mobile: false });
   await page.goto('http://127.0.0.1:5173/');
   await page.waitForSelector('[contenteditable=true]', { state: 'visible' });
-  await page.click('[contenteditable=true]'); await page.keyboard.paste('Drop target'); await page.keyboard.press('Enter');
+  await page.click('[contenteditable=true]');
+  await page.keyboard.paste('Start');
+  await page.waitForFunction(() => document.querySelector('[contenteditable=true] > p')?.textContent === 'Start');
+  await page.hover('[contenteditable=true] > p:first-child');
+  await page.click('button[aria-label="Add block"]');
+  const paragraphs = () => page.evaluate(() => [...document.querySelectorAll('[contenteditable=true] > p')].map(p => p.textContent));
+  assert.deepEqual(await paragraphs(), ['Start', ''], '加号应在 Start 后立即插入空段落');
+  await page.keyboard.insertText('Drop target');
+  assert.deepEqual(await paragraphs(), ['Start', 'Drop target'], '无需再点正文，输入应落在新段落');
+  await page.keyboard.press('Enter');
   await page.click('button[aria-label="Image"]'); await page.setInputFiles('[role=dialog] input[type=file]', [file('drag-portrait.png')]);
   await page.waitForSelector('.rr-image-loaded', { state: 'visible' }); await page.keyboard.press('ArrowDown');
   await page.click('button[aria-label="Live photo"]'); await page.setInputFiles('input[aria-label="Cover image"]', [file('drag-portrait.png')]);
