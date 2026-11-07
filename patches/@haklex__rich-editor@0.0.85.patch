@@ -67,7 +67,7 @@ index a190a5b5bedd61591fba71d203220c26c271634b..558338d14c51e44e9fa914b1d19b2d0a
      };
    }
 diff --git a/dist/SubmitShortcutPlugin-CkuM_8Wk.js b/dist/SubmitShortcutPlugin-CkuM_8Wk.js
-index 33c724b..3838f87 100644
+index 33c724b..e5c4066 100644
 --- a/dist/SubmitShortcutPlugin-CkuM_8Wk.js
 +++ b/dist/SubmitShortcutPlugin-CkuM_8Wk.js
 @@ -1,3 +1,4 @@
@@ -139,6 +139,52 @@ index 33c724b..3838f87 100644
          parentNode.remove();
          return;
        }
+@@ -1020,7 +1035,7 @@ var urlPreviewImage = "_1x58dbfq";
+ var helperText = "_1x58dbfr";
+ var dialogFooter = "_1x58dbfs";
+ function isImageFile(file) {
+-  return file.type.startsWith("image/");
++  return file.type.startsWith("image/") || /\.hei[cf]$/i.test(file.name);
+ }
+ function hasImageData(dataTransfer) {
+   if (!dataTransfer) return false;
+@@ -1097,7 +1112,8 @@ function ImageUploadPlugin({ onUpload }) {
+       setPendingUploads((value) => value + 1);
+       if (closeDialog) setDialogUploading(true);
+       try {
+-        const [result, meta] = await Promise.all([uploadRef.current(file), computeImageMeta(file)]);
++        const result = await uploadRef.current(file);
++        const meta = await computeImageMeta(result.metadataFile ?? file);
+         editor.update(() => {
+           const node = $createImageNode({
+             src: result.src,
+@@ -1119,7 +1135,7 @@ function ImageUploadPlugin({ onUpload }) {
+         return true;
+       } catch (err) {
+         console.error("[ImageUploadPlugin]", err);
+-        pushToast("error", "Image upload failed");
++        pushToast("error", err instanceof Error ? err.message : "Image upload failed");
+         return false;
+       } finally {
+         setPendingUploads((value) => Math.max(value - 1, 0));
+@@ -1332,7 +1348,7 @@ function ImageUploadPlugin({ onUpload }) {
+                   /* @__PURE__ */ jsx(
+                     "input",
+                     {
+-                      accept: "image/*",
++                      accept: "image/*,.heic,.heif",
+                       className: hiddenInput,
+                       ref: fileInputRef,
+                       type: "file",
+@@ -1349,7 +1365,7 @@ function ImageUploadPlugin({ onUpload }) {
+                   ] }) }) : /* @__PURE__ */ jsxs(Fragment, { children: [
+                     /* @__PURE__ */ jsx("span", { className: uploadDropIcon, children: /* @__PURE__ */ jsx(Upload, { size: 18 }) }),
+                     /* @__PURE__ */ jsx("span", { className: uploadDropTitle, children: "Click to upload or drag and drop" }),
+-                    /* @__PURE__ */ jsx("span", { className: uploadDropDesc, children: "PNG, JPG, GIF, WebP" })
++                    /* @__PURE__ */ jsx("span", { className: uploadDropDesc, children: "PNG, JPG, GIF, WebP, HEIC/HEIF" })
+                   ] })
+                 ]
+               }
 diff --git a/dist/block-identity.mjs b/dist/block-identity.mjs
 new file mode 100644
 index 0000000000000000000000000000000000000000..a82056803b10eab50b727da1cb03a0572a40cf8a

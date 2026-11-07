@@ -1,9 +1,10 @@
 import { reactRouter } from '@react-router/dev/vite';
 import stylex from '@stylexjs/unplugin';
 import { defineConfig } from 'vite';
+import { localMediaPlugin } from './server/normalize';
 
 export default defineConfig({
-  plugins: [stylex.vite({
+  plugins: [localMediaPlugin(), stylex.vite({
     useCSSLayers: true,
     // 编辑器包含按需加载的第三方 CSS，StyleX 必须注入每次都会加载的根样式。
     cssInjectionTarget: fileName => /(^|\/)root-[^/]+\.css$/.test(fileName),
@@ -15,6 +16,6 @@ export default defineConfig({
     '@lexical/react/useLexicalNodeSelection', '@lexical/utils', 'lexical', 'lucide-react', 'radix-ui',
     '@haklex/rich-renderer-image', '@haklex/rich-editor/nodes', '@stylexjs/stylex',
   ] },
-  server: { port: 5173, strictPort: true, watch: { ignored: ['**/artifacts/**'] } },
+  server: { port: 5173, strictPort: true, watch: { ignored: ['**/artifacts/**', '**/.local-media/**'] }, fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/.local-media/**'] } },
   preview: { port: 4173, strictPort: true, host: '127.0.0.1' },
 });

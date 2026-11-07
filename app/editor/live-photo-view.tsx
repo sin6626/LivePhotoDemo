@@ -23,6 +23,7 @@ export default function LivePhotoView({ data, nodeKey }: { data: LivePhotoData; 
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
   const [error, setError] = useState('');
+  const [preparing, setPreparing] = useState(false);
   const attachVideo = useCallback((element: HTMLVideoElement | null) => {
     if (video.current !== element) video.current?.pause();
     video.current = element;
@@ -68,9 +69,10 @@ export default function LivePhotoView({ data, nodeKey }: { data: LivePhotoData; 
 
   async function replaceVideo(file: File | undefined) {
     if (!file || busy.current) return;
-    busy.current = true; stop(); setError('');
+    busy.current = true; setPreparing(true); stop(); setError('');
     try {
-      const clip = await readVideo(file);
+      controller.current = new AbortController();
+      const clip = await readVideo(file, controller.current.signal);
       if (!active.current) return;
       const videoSrc = session.addFile(clip.blob);
       editor.update(() => {
@@ -78,7 +80,7 @@ export default function LivePhotoView({ data, nodeKey }: { data: LivePhotoData; 
         if (node instanceof LivePhotoNode) node.setVideoSrc(videoSrc);
       }, { tag: HISTORY_PUSH_TAG });
     } catch (cause) { if (active.current) setError(cause instanceof Error ? cause.message : 'Could not replace the video.'); }
-    finally { busy.current = false; }
+    finally { busy.current = false; if (active.current) setPreparing(false); }
   }
   async function download() {
     if (busy.current) return;
@@ -120,13 +122,14 @@ export default function LivePhotoView({ data, nodeKey }: { data: LivePhotoData; 
         onKeyUp={event => { if ([' ', 'Enter'].includes(event.key)) { event.preventDefault(); event.stopPropagation(); stop(); } }} onBlur={stop}><Radio size={12} />{playing ? 'PLAYING' : 'LIVE'}</button>
     </>,
     renderToolbarActions: className => <>
-      <button type="button" className={className} title="Replace video" aria-label="Replace video" onMouseDown={event => { event.preventDefault(); event.stopPropagation(); }} onClick={() => fileInput.current?.click()}><Film size={14} /></button>
+      <button type="button" className={className} disabled={preparing} title="Replace video" aria-label="Replace video" onMouseDown={event => { event.preventDefault(); event.stopPropagation(); }} onClick={() => fileInput.current?.click()}><Film size={14} /></button>
       <button type="button" className={className} title={muted ? 'Unmute live photo' : 'Mute live photo'} aria-label={muted ? 'Unmute live photo' : 'Mute live photo'} aria-pressed={!muted} onMouseDown={event => { event.preventDefault(); event.stopPropagation(); }} onClick={() => setMuted(!muted)}>{muted ? <VolumeX size={14} /> : <Volume2 size={14} />}</button>
     </>,
   }}>
     <div ref={wrapper} onPointerDownCapture={pointerDown} onPointerMoveCapture={pointerMove} onPointerLeave={stop} onDragStartCapture={stop} onContextMenuCapture={event => { if (hold.current) event.preventDefault(); }}>
       <ImageEditRenderer src={data.src} altText={data.altText} width={data.width} height={data.height} caption={data.caption} thumbhash={data.thumbhash} accent={data.accent} />
-      <input ref={fileInput} type="file" hidden aria-label="Replacement video" accept="video/mp4,.mp4" onChange={event => { void replaceVideo(event.target.files?.[0]); event.target.value = ''; }} />
+      <input ref={fileInput} type="file" hidden aria-label="Replacement video" accept="video/mp4,video/quicktime,.mp4,.mov,.m4v" onChange={event => { void replaceVideo(event.target.files?.[0]); event.target.value = ''; }} />
+      {preparing && <p role="status">Preparing video…</p>}
       {error && <p role="alert" {...stylex.props(s.error)}>{error}</p>}
     </div>
   </ImageEditExtensionsProvider>;

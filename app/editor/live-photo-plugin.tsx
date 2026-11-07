@@ -18,6 +18,8 @@ export function LivePhotoPlugin() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const lock = useRef(false);
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => () => request.current?.abort(), []);
   const selection = useRef<BaseSelection | null>(null);
   const photoUrl = useBlobUrl(photo?.blob);
   useEffect(() => editor.registerCommand(OPEN_LIVE_PHOTO_COMMAND, () => {
@@ -25,14 +27,17 @@ export function LivePhotoPlugin() {
     setOpen(true); return true;
   }, COMMAND_PRIORITY_EDITOR), [editor]);
 
-  function close() { setOpen(false); setPhoto(undefined); setClip(undefined); setError(''); }
+  function close() { request.current?.abort(); request.current = null; lock.current = false; setBusy(''); setOpen(false); setPhoto(undefined); setClip(undefined); setError(''); }
   async function select(file: File | undefined, kind: 'photo' | 'video') {
     if (!file || lock.current) return;
-    lock.current = true; setBusy('Reading files…'); setError('');
+    const job = new AbortController(); request.current = job;
+    lock.current = true; setBusy(kind === 'photo' ? 'Preparing image…' : 'Preparing video…'); setError('');
     kind === 'photo' ? setPhoto(undefined) : setClip(undefined);
-    try { kind === 'photo' ? setPhoto(await readImage(file)) : setClip(await readVideo(file)); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not read the selected file.'); }
-    finally { lock.current = false; setBusy(''); }
+    try {
+      if (kind === 'photo') { const image = await readImage(file, job.signal); if (!job.signal.aborted) setPhoto(image); }
+      else { const video = await readVideo(file, job.signal); if (!job.signal.aborted) setClip(video); }
+    } catch (cause) { if (!job.signal.aborted) setError(cause instanceof Error ? cause.message : 'Could not prepare the file.'); }
+    finally { if (request.current === job) { request.current = null; lock.current = false; setBusy(''); } }
   }
   async function insert() {
     if (!photo || !clip || lock.current) return;
@@ -54,30 +59,30 @@ export function LivePhotoPlugin() {
     finally { lock.current = false; setBusy(''); }
   }
 
-  return <Dialog open={open} onOpenChange={next => { if (!next && !lock.current) close(); }}>
+  return <Dialog open={open} onOpenChange={next => { if (!next) close(); }}>
     <DialogPopup showCloseButton={false} style={{ padding: 0, gap: 0, width: 'min(560px, calc(100vw - 2rem))', maxHeight: 'calc(100dvh - 2rem)', overflowY: 'auto' }}>
       <div {...stylex.props(s.header)}><DialogTitle>Insert live photo</DialogTitle></div>
       <div {...stylex.props(s.body)}>
         <DialogDescription>Choose a cover image and a short video. Press and hold the image to play.</DialogDescription>
         <div {...stylex.props(s.fields)}>
           <label {...stylex.props(s.upload)} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); void select(event.dataTransfer.files[0], 'photo'); }}>
-            <input aria-label="Cover image" type="file" accept="image/png,image/jpeg,.jpg,.jpeg,.png" disabled={!!busy} {...stylex.props(s.input)} onChange={event => { void select(event.target.files?.[0], 'photo'); event.target.value = ''; }} />
+            <input aria-label="Cover image" type="file" accept="image/png,image/jpeg,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif" disabled={!!busy} {...stylex.props(s.input)} onChange={event => { void select(event.target.files?.[0], 'photo'); event.target.value = ''; }} />
             {photoUrl ? <img src={photoUrl} alt="Cover preview" {...stylex.props(s.thumbnail)} /> : <span {...stylex.props(s.icon)}><Upload size={18} /></span>}
             <strong {...stylex.props(s.fileName)}>{photo?.name ?? 'Choose cover image'}</strong>
-            <span {...stylex.props(s.meta)}>{photo ? `${photo.width} × ${photo.height}` : 'PNG, JPEG · Up to 20 MB'}</span>
+            <span {...stylex.props(s.meta)}>{photo ? `${photo.width} × ${photo.height}${photo.converted ? ' · Converted to JPEG' : ''}` : 'JPEG, PNG, HEIC/HEIF · 20 MB'}</span>
           </label>
           <label {...stylex.props(s.upload)} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); void select(event.dataTransfer.files[0], 'video'); }}>
-            <input aria-label="Video clip" type="file" accept="video/mp4,.mp4" disabled={!!busy} {...stylex.props(s.input)} onChange={event => { void select(event.target.files?.[0], 'video'); event.target.value = ''; }} />
+            <input aria-label="Video clip" type="file" accept="video/mp4,video/quicktime,.mp4,.mov,.m4v" disabled={!!busy} {...stylex.props(s.input)} onChange={event => { void select(event.target.files?.[0], 'video'); event.target.value = ''; }} />
             <span {...stylex.props(s.icon)}>{clip ? <Check size={18} /> : <Film size={18} />}</span>
             <strong {...stylex.props(s.fileName)}>{clip?.name ?? 'Choose video'}</strong>
-            <span {...stylex.props(s.meta)}>{clip ? `${clip.duration.toFixed(1)} s · ${(clip.blob.size / 1024 / 1024).toFixed(1)} MB` : 'MP4 · Max 100 MB / 30s'}</span>
+            <span {...stylex.props(s.meta)}>{clip ? `${clip.duration.toFixed(1)} s · ${clip.action === 'original' || clip.action === 'cached' ? 'Compatible MP4' : clip.action === 'remuxed' ? 'Remuxed to MP4' : 'Converted to MP4'}` : 'MP4, MOV · 100 MB / 30s'}</span>
           </label>
         </div>
         {error && <p role="alert" {...stylex.props(s.error)}>{error}</p>}
       </div>
       <div {...stylex.props(s.footer)}>
-        <span {...stylex.props(s.note)}><LockKeyhole size={12} />Processed locally. Nothing is uploaded.</span>
-        <ActionBar><ActionButton variant="outline" disabled={!!busy} onClick={close}>Cancel</ActionButton><ActionButton variant="accent" disabled={!photo || !clip || !!busy} onClick={() => void insert()}>{busy || 'Insert'}</ActionButton></ActionBar>
+        <span {...stylex.props(s.note)}><LockKeyhole size={12} />Processed on this Mac. Originals are kept.</span>
+        <ActionBar><ActionButton variant="outline" onClick={close}>Cancel</ActionButton><ActionButton variant="accent" disabled={!photo || !clip || !!busy} onClick={() => void insert()}>{busy || 'Insert'}</ActionButton></ActionBar>
       </div>
       {!busy && <DialogClose aria-label="Close dialog" {...stylex.props(s.close)}><X size={16} /></DialogClose>}
     </DialogPopup>

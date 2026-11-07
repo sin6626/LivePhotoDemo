@@ -1,5 +1,5 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
-index db30cad..7ce6f41 100644
+index db30cad..73f628f 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -2,14 +2,16 @@ import { jsx, jsxs, Fragment } from "react/jsx-runtime";
@@ -30,7 +30,7 @@ index db30cad..7ce6f41 100644
    const store = useStore();
    const [editor] = useLexicalComposerContext();
    const uploadImage = useImageUpload();
-@@ -194,24 +197,17 @@ function useImageActions() {
+@@ -194,30 +197,23 @@ function useImageActions() {
      if (src) window.open(src, "_blank", "noopener,noreferrer");
    }, [store]);
    const handleDownload = useCallback(() => {
@@ -58,7 +58,33 @@ index db30cad..7ce6f41 100644
        node.insertAfter(copy);
      });
    }, [withImageNode]);
-@@ -474,6 +470,7 @@ function ReplacePanel() {
+   const handleReplaceFile = useCallback(
+     async (file) => {
+-      if (!file || !file.type.startsWith("image/")) return;
++      if (!file || !(file.type.startsWith("image/") || /\.hei[cf]$/i.test(file.name))) return;
+       store.set(replaceLoadingAtom, true);
+       store.set(replaceErrorAtom, null);
+       try {
+@@ -226,7 +222,8 @@ function useImageActions() {
+           altText: nextFile.name
+         });
+         const uploader = uploadImage ?? fallbackUploader;
+-        const [result, meta] = await Promise.all([uploader(file), computeImageMeta(file)]);
++        const result = await uploader(file);
++        const meta = await computeImageMeta(result.metadataFile ?? file);
+         withImageNode((node) => {
+           node.setSrc(result.src);
+           node.setAltText(result.altText ?? file.name);
+@@ -405,7 +402,7 @@ function ReplacePanel() {
+       /* @__PURE__ */ jsx(
+         "input",
+         {
+-          accept: "image/*",
++          accept: "image/*,.heic,.heif",
+           ref: fileInputRef,
+           style: { display: "none" },
+           type: "file",
+@@ -474,6 +471,7 @@ function ReplacePanel() {
    ] });
  }
  function ImageEditToolbar() {
@@ -66,7 +92,7 @@ index db30cad..7ce6f41 100644
    const toolbarVisible = useAtomValue(toolbarVisibleAtom);
    const metaOpen = useAtomValue(metaOpenAtom);
    const setMetaOpen = useSetAtom(metaOpenAtom);
-@@ -484,6 +481,7 @@ function ImageEditToolbar() {
+@@ -484,6 +482,7 @@ function ImageEditToolbar() {
      {
        className: `${editToolbar} ${semanticClassNames.editToolbar} ${toolbarVisible ? `${editToolbarVisible} ${semanticClassNames.editToolbarVisible}` : ""}`,
        children: [
@@ -74,7 +100,7 @@ index db30cad..7ce6f41 100644
          /* @__PURE__ */ jsxs(
            Popover,
            {
-@@ -624,6 +622,7 @@ function ImageEditRendererInner(props) {
+@@ -624,6 +623,7 @@ function ImageEditRendererInner(props) {
    return /* @__PURE__ */ jsx(ImageEditProvider, { props, children: /* @__PURE__ */ jsx(ImageEditContent, {}) });
  }
  function ImageEditContent() {
@@ -82,7 +108,7 @@ index db30cad..7ce6f41 100644
    const wrapperRef = useAtomValue(wrapperRefAtom);
    const setHovering = useSetAtom(hoveringAtom);
    const src = useAtomValue(srcAtom);
-@@ -678,6 +677,7 @@ function ImageEditContent() {
+@@ -678,6 +678,7 @@ function ImageEditContent() {
                      onLoad: () => setLoadState("loaded")
                    }
                  ),
@@ -90,7 +116,7 @@ index db30cad..7ce6f41 100644
                  loadState === "loading" && /* @__PURE__ */ jsx("span", { className: `${loader} ${semanticClassNames.loader}` }),
                  loadState === "error" && /* @__PURE__ */ jsx("span", { className: `${errorBadge} ${semanticClassNames.errorBadge}`, children: "Image failed to load" })
                ]
-@@ -698,6 +698,7 @@ function ImageEditContent() {
+@@ -698,6 +699,7 @@ function ImageEditContent() {
    );
  }
  export {

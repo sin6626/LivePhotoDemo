@@ -72,7 +72,7 @@ await page.fill('input[placeholder="Caption (optional)"]', '和普通图片一�
 await page.click('button:text-is("Save")');
 assert.equal((await content()).find(n => n.type === 'live-photo').caption, '和普通图片一样的图注');
 await clickImageAction('Replace image');
-await page.setInputFiles('input[type=file][accept="image/*"]', [fixture('alternate.png')]);
+await page.setInputFiles('input[type=file][accept^="image/*"]', [fixture('alternate.png')]);
 await page.waitForFunction(() => document.querySelector('[data-live-photo] .rr-image-img')?.naturalWidth === 320, undefined, { timeout: 10000 });
 const coverReplaced = (await content()).find(n => n.type === 'live-photo');
 assert.notEqual(coverReplaced.src, initial.src);

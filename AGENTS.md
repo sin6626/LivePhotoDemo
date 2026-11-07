@@ -6,7 +6,7 @@
 - 禁止批量删除文件或目录；只允许删除一个明确路径文件。可清理本任务自己的 worktree，不干扰其他工作。
 - 控制资源占用：只保留用户需要的开发服务，测试后关闭自启浏览器和临时预览；构建使用 2 GB Node 堆限制，不并行跑多个构建/转码。
 - 当前项目是 Demo，博客源码仅作参考，不修改 SinPersonalSpace、不接真实博客 API、不读写相册，不改用户原始图片/视频。
-- 有后端接口未知字段先问用户，不猜；业务接口开发日志记录方法、URL、参数、请求头和响应，敏感字段脱敏，生产不打印。本项目目前无业务 API。
+- 有后端接口未知字段先问用户，不猜；业务接口开发日志记录方法、URL、参数、请求头和响应，敏感字段脱敏，生产不打印。转换接口归本 Demo 所有，契约见 README；不调用博客业务 API。
 - UI 还原须使用真实素材，缺图向用户说明，不用 CSS/SVG 冒充图片。这里以原编辑器图片节点的实际 UI 为基准。
 - 上下文压缩前更新本文件；只提交本任务路径，禁止 git add -A。
 
@@ -19,7 +19,7 @@
 - `ImageSelectionPlugin` 同时处理普通图片和实况图的点击/Shift/选区高亮。删除、剪贴板、历史、块拖动由原 Lexical/Haklex 处理。
 - 原操作栏：Edit details、Replace image、Open source、Duplicate、Download、Remove image；实况仅加替换视频和声音开关。无常驻底栏、无额外一整行插入按钮。
 - 长按 250ms 播放，移动超过 8px、拖动、离开、松开、失焦/隐藏时停止；不捕获指针，不用大 button 覆盖图片。LIVE 小标识支持键盘播放。长按时抑制触屏原生菜单，普通右键保持正常。
-- 普通图片上传保留原格式/透明度/动画；实况封面及导出使用 JPEG（质量 0.92、透明填白）。视频保持原始字节，不转码。
+- 可直接解码的普通图片保留原格式/透明度/动画，上传 HEIC/HEIF 则生成 JPEG 副本并归档原件；实况封面及导出使用 JPEG（质量 0.92、透明填白）。标准化阶段按需换容器或转码；Motion Photo 封装时保留标准化后的视频字节。
 - `session.files` 保存 Blob URL→Blob，页面卸载释放；为撤销保留资源，累计输入资源最多 256 MB。图片最多 20 MB/2400 万像素，视频最多 100 MB/30 秒。
 - 替换封面保留视频，替换视频保留封面，各自可撤销。下载用当前资源重新生成 Motion Photo；Open source 与普通图一样打开当前封面。
 - 仍是本地会话，刷新清空；博客保存、发布页渲染、跨页面持久化尚未接入。节点结构升级后需要刷新重新插入。
@@ -57,10 +57,18 @@
 
 ## Mac 格式实验（2026-11-06）
 - 详情见 docs/media-normalization.md 与 artifacts/mac-formats/browser-results.json。浏览器测试脚本支持 `?space=<已分配的测试空间 ID>`，复用同一空间。
-- 当前 Mac Chromium 156 原生无法解码生成的 HEIC 样本；原生可以解码 HEVC MP4、HEVC MOV、H.264 MOV。Demo 的 MOV 拒绝来自当前容器白名单，不代表浏览器不能播放。
+- 当前 Mac Chromium 156 原生无法解码生成的 HEIC 样本；原生可以解码 HEVC MP4、HEVC MOV、H.264 MOV。接入自动转换前，Demo 的 MOV 拒绝来自当时的容器白名单，不代表浏览器不能播放。
 - 用户真实 MP4 是 HEVC + AAC，并非 H.264。扩展名/容器校验不能当作统一编码保证。
 - 本机 sips 已验证 HEIC→JPEG，FFmpeg 已验证 SDR HEVC MOV→H.264/yuv420p + AAC/faststart MP4。HEIC/MOV 为用户现有素材衍生的测试样本，未读取相册、未改原文件。
 - 转换后的 JPEG/MP4 已实际插入、播放、导出并验证视频字节一致；H.264/AAC MOV 重封装到 MP4 的视频和音频编码数据哈希不变。英文弹窗、原操作栏回归、类型检查和 2 GB 内生产构建通过。
 - 浏览器回归操作浮动图片工具栏时，先把 CDP 指针移出再移入图片并等待 opacity=1，再命中按钮；混用原生光标与 CDP 时，同坐标移动可能不触发 mouseenter，不能将误点后面的 div 当作功能失败。
-- 当前网页仍没有接入自动 HEIC 解码/视频转码；不要把命令行测试成功宣称为网页自动转换。正式接入建议在素材上传/标准化层处理，节点保持 src/videoSrc 引用，避免塞进编辑器组件。
+- 当时网页没有接入自动 HEIC 解码/视频转码（已被下方 11 月 7 日实现替代）；不要把命令行测试成功宣称为网页自动转换。正式接入建议在素材上传/标准化层处理，节点保持 src/videoSrc 引用，避免塞进编辑器组件。
 - 尚未测 HDR/Dolby Vision/RAW、Safari/Firefox/Windows/Android；本机 WebCodecs 能力探测不等于完整跨平台转码方案。
+
+## 自动转换已接入（2026-11-07）
+- `server/normalize.ts` 通过同一 Vite 插件接入 dev 和 preview；`app/lib/normalize-media.ts` 是浏览器请求边界，开发日志不输出媒体二进制。只改 Demo，不访问或改动博客项目。
+- 实况图插入/更换视频、HEIC 普通图插入/替换封面共用标准化入口。原图片上传与替换补丁用 uploader 返回的 metadataFile 获取缩略信息，否则 Chromium 会再次解码原 HEIC 而失败。
+- HEIC/HEIF → JPEG；视频先 ffprobe，再按轨道直通/重封装/转码为兼容 MP4，优先复制已有的合规音轨。HDR 等不支持的输入给英文错误。无需另起端口或安装前端转码依赖。
+- `.local-media/<原文件哈希>/original/<文件名>` 与兼容副本为用户要求保留的私有归档，不删除、不提交、不允许通过 Vite 静态读取。临时作业只清理自己创建的两个明确文件及空目录。正文仍是浏览器会话状态。
+- 验证：`npm test`、`npm run typecheck`；有格式夹具和已启动服务时运行 `node tests/normalize-api.mjs`、`tests/mac-formats.browser.mjs` 与 `tests/auto-normalize.browser.mjs`（Ego Browser，支持 ?space=ID，后者 ?preview=1 验证 4173）。
+- 已验证 dev 与独立 4173 生产预览：普通 HEIC、HEIC + HEVC MOV 插入、播放、导出、HEIC 替换封面及 MOV 替换视频；导出视频与兼容副本逐字节一致，源文件/归档一致。无残留临时作业。6 项 Node 测试、类型检查、2 GB 构建通过。

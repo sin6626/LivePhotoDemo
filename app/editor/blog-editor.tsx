@@ -24,7 +24,7 @@ function EditorContent({ initialValue, onEditorReady }: Partial<NestedDocDialogE
   const session = useMediaSession();
   const imageUpload = useCallback(async (file: File) => {
     const image = await readEditorImage(file);
-    return { src: session.addFile(image.blob), width: image.width, height: image.height, altText: image.name };
+    return { src: session.addFile(image.blob), width: image.width, height: image.height, altText: image.name, metadataFile: image.blob };
   }, [session]);
   return <ShiroEditor initialValue={initialValue} onEditorReady={onEditorReady} variant="article" theme="light" imageUpload={imageUpload} extraNodes={extraNodes} header={<EditorToolbar />} placeholder="Start writing, or type / to insert…" style={{ minHeight: 600 }}><ImageSelectionPlugin /><LivePhotoPlugin /><NestedDocPlugin /></ShiroEditor>;
 }

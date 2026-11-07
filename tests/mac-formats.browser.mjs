@@ -41,9 +41,8 @@ const environment = await page.evaluate(async () => ({
   h264Encoder: typeof VideoEncoder !== 'undefined' ? (await VideoEncoder.isConfigSupported({ codec: 'avc1.42001f', width: 640, height: 480, bitrate: 1500000, framerate: 30 })).supported : false,
   aacEncoder: typeof AudioEncoder !== 'undefined' ? (await AudioEncoder.isConfigSupported({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 })).supported : false,
 }));
-assert.ok(rows.find(row => row.name === 'compatible.jpg').app.accepted);
-assert.ok(rows.find(row => row.name === 'compatible.mp4').app.accepted);
+for (const row of rows) assert.ok(row.app.accepted, `${row.name}: ${row.app.error}`);
 const report = { environment, rows };
-await writeFile(fileURLToPath(new URL('../artifacts/mac-formats/browser-results.json', import.meta.url)), JSON.stringify(report, null, 2));
+await writeFile(fileURLToPath(new URL('../artifacts/mac-formats/automatic-results.json', import.meta.url)), JSON.stringify(report, null, 2));
 console.log(report);
 await page.evaluate(() => document.querySelector('#codec-probe').remove());

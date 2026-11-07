@@ -2,12 +2,16 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const xmpHeader = 'http://ns.adobe.com/xap/1.0/\0';
 
+export function isMp4Brand(brand: string) {
+  return /^(isom|iso[2-9]|mp4[12]|avc1|M4V |MSNV|dash)$/.test(brand);
+}
+
 export async function validateMp4(video: Blob) {
   const bytes = new Uint8Array(await video.slice(0, 32).arrayBuffer());
   const brand = decoder.decode(bytes.slice(8, 12));
   if (bytes.length < 24 || decoder.decode(bytes.slice(4, 8)) !== 'ftyp' ||
-      !/^(isom|iso[2-9]|mp4[12]|avc1|M4V |MSNV|dash)$/.test(brand)) {
-    throw new Error('Choose a valid MP4 video. Convert MOV or WebM to H.264 MP4 first.');
+      !isMp4Brand(brand)) {
+    throw new Error('The video is not a valid MP4.');
   }
 }
 
